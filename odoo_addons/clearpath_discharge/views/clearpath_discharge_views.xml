@@ -93,12 +93,15 @@
                             string="Generate Final Invoice" class="btn-primary"
                             invisible="invoice_id or (billing_status != 'approved' and state not in ('cleared', 'released'))"
                             groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_admin"/>
+                    <button name="action_toggle_audit_log" type="object" class="btn-secondary"
+                            string="&#128065;&#65039; Toggle Audit Log"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,flagged,cleared,released"
                            invisible="state == 'released'"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
+                        <field name="show_audit_log" invisible="1"/>
                         <field name="pharmacy_status" invisible="1"/>
                         <field name="billing_status" invisible="1"/>
                         <field name="insurance_status" invisible="1"/>
@@ -313,7 +316,7 @@
                         </page>
                     </notebook>
                 </sheet>
-                <chatter/>
+                <chatter invisible="not show_audit_log"/>
             </form>
         </field>
     </record>

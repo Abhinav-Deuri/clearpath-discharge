@@ -553,3 +553,17 @@ class TestDischargeFlow(TransactionCase):
         self.assertFalse(d.invoice_id)
         self.assertTrue(move.exists())
 
+    def test_36_audit_log_toggle_and_bold_chatter(self):
+        d = self.discharge
+        self.assertFalse(d.show_audit_log)
+        d.action_toggle_audit_log()
+        self.assertTrue(d.show_audit_log)
+        d.action_toggle_audit_log()
+        self.assertFalse(d.show_audit_log)
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        self.assertIn('invisible="not show_audit_log"', arch)
+        msg = d.message_post(body="Released by <b>Admin</b> <script>x</script>")
+        self.assertIn('<b>Admin</b>', str(msg.body))
+        self.assertNotIn('<script>', str(msg.body))
+

@@ -51,3 +51,5 @@ Audio and photos are real patient data: use a provider you are cleared to send i
 
 **Reception flow:** Contacts -> create a Contact (name, phone, email, address). On that Contact click **Admit as Patient**, add the patient code and bed. The Patient form shows the Contact details on top and "Clinical Admission Details" below; the Contact shows a **Patient** smart button back.
 **Billing fixes keep the claim in sync:** fixing a Billed quantity (Billing pop-up or the supply list) re-runs the Insurance worker for the same revision and rebuilds the TPA claim. If the claim was already approved, that approval is withdrawn.
+
+**Audit log:** the chatter (history of state changes, sign-offs, invoices) is hidden by default. Click **Toggle Audit Log** in the header to show or hide it, for example when showing the judges the trail.

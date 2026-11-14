@@ -262,6 +262,7 @@ class ClearpathDischarge(models.Model):
     invoice_id = fields.Many2one('account.move', string="Generated Invoice", readonly=True, copy=False)
     invoice_label = fields.Char(compute='_compute_invoice_label')
     alert_count = fields.Integer(compute='_compute_alert_count')
+    show_audit_log = fields.Boolean(string="Show Audit Log", default=False, copy=False)
     top_alert_kind = fields.Selection(
         [('pharmacy', 'Pharmacy'), ('billing', 'Billing'), ('insurance', 'Insurance')],
         compute='_compute_top_alert')
@@ -450,6 +451,19 @@ class ClearpathDischarge(models.Model):
             sort_keys=True,
         )
         return hashlib.sha256(blob.encode()).hexdigest()
+
+    def action_toggle_audit_log(self):
+        """Show / hide the chatter (audit history) on the form; hidden by default for a clean demo."""
+        for record in self:
+            record.show_audit_log = not record.show_audit_log
+
+    def message_post(self, **kwargs):
+        """Our chatter notes use <b>; Odoo escapes plain-string bodies, so keep ONLY <b> tags."""
+        body = kwargs.get('body')
+        if isinstance(body, str) and not isinstance(body, Markup):
+            kwargs['body'] = Markup(
+                str(escape(body)).replace('&lt;b&gt;', '<b>').replace('&lt;/b&gt;', '</b>'))
+        return super().message_post(**kwargs)
 
     def _verify_payload(self):
         self.ensure_one()
