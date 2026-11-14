@@ -602,8 +602,50 @@
         background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
         background-color: var(--cp-blue-soft);
         animation: cp-ants .6s linear infinite;
+    }
 
-        img { animation: cp-bob 1.4s ease-in-out infinite; }
+    // -- Supply sheet upload: the WHOLE dashed box is the upload target. Odoo's image widget only offers a
+    // small edit button that appears on hover over the picture; here that button's hit area is stretched
+    // over the box and the button itself stays visible. (Do not animate/transform the <img>: a transformed
+    // image paints above the upload controls and swallows the click.)
+    .o_cp_drop .o_field_image {
+        display: block;
+        width: 100%;
+
+        > div { display: block !important; width: 100%; min-height: 150px; }
+        img { display: block; margin: 0 auto; }
+
+        .o_image_uploader_container {
+            inset: 0;
+            z-index: 2;
+            width: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            opacity: 1 !important;
+            align-items: flex-end;
+            justify-content: center !important;
+            gap: 8px;
+            padding-bottom: 4px;
+
+            .btn { position: relative; z-index: 1; box-shadow: var(--cp-shadow); }
+            .o_select_file_button {
+                position: static;
+                color: #fff;
+                background: var(--cp-blue);
+                border-color: var(--cp-blue);
+
+                // invisible sheet over the whole box: a click anywhere opens the file picker
+                &::after { content: ""; position: absolute; inset: 0; cursor: pointer; }
+            }
+        }
+
+        &:has(.o_image_uploader_container)::after {
+            content: "Click anywhere in this box to add a photo of the supply sheet";
+            display: block;
+            margin-top: 8px;
+            font-size: .8rem;
+            color: var(--cp-muted);
+        }
     }
 
     // -- Summary rows cascade in; each row highlights on hover
