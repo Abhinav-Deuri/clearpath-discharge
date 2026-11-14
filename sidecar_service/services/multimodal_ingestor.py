@@ -24,7 +24,7 @@ MAX_AUDIO_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 DEMO_TRANSCRIPT = (
-    "Bed 402, John Doe, post-op day one after laparoscopic appendectomy. Uncomplicated course, "
+    "Bed 402, Arabith, post-op day one after laparoscopic appendectomy. Uncomplicated course, "
     "afebrile, pain controlled on oral analgesia, tolerating a regular diet and ambulating "
     "independently. Incisions clean and dry. Plan: discharge home today. Start Amoxicillin 500mg "
     "three times daily for five days as post-operative prophylaxis. Surgical clinic follow-up in two weeks."

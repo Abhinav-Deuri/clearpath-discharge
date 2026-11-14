@@ -1,7 +1,7 @@
 import base64
 from unittest.mock import patch
 
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
 
 MODEL_REQUESTS = 'odoo.addons.clearpath_discharge.models.clearpath_discharge.requests'
@@ -465,7 +465,7 @@ class TestDischargeFlow(TransactionCase):
             "- **Items for clinician review**: Amoxicillin <script>x</script>\n---\n"
             "- **Follow-up**: Surgical clinic in 2 weeks")
         html = str(summary_to_html(sample))
-        for needle in ('Discharge Summary', 'data-icon="person"', 'data-icon="history"', '#dc3545', 'data-icon="warning"',
+        for needle in ('data-icon="person"', 'data-icon="history"', '#dc3545', 'data-icon="warning"',
                        '&lt;script&gt;'):
             self.assertIn(needle, html)
         self.assertNotIn('---', html)
@@ -473,8 +473,10 @@ class TestDischargeFlow(TransactionCase):
         self.assertNotIn('---', clean_summary_text(sample))
         self.assertIn('Just a plain note.', str(summary_to_html("Just a plain note.")))
         bare = str(summary_to_html("Discharge Summary\n- **Patient**: PT-1\n- **Plan**: home"))
-        self.assertIn('Discharge Summary', bare)
-        self.assertIn('data-icon="description"', bare)  # first bare line became the card title
+        self.assertNotIn('Discharge Summary', bare)  # generic title: the form's card header carries it
+        self.assertIn('data-icon="person"', bare)
+        titled = str(summary_to_html("Cardiac Discharge"+chr(10)+"- **Patient**: PT-1"+chr(10)+"- **Plan**: home"))
+        self.assertIn('Cardiac Discharge', titled)  # a specific title is kept
 
     def test_30_top_alert_ribbons_and_icon_buttons(self):
         d = self._locked()
@@ -482,7 +484,7 @@ class TestDischargeFlow(TransactionCase):
         self.assertEqual(d.top_alert_title, 'Penicillin Allergy Conflict')
         arch = self.env['clearpath.discharge'].get_view(
             self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
-        for needle in ('Allergy Hold', 'Cleared', 'oi-spin', 'cp-beat-fade', 'data-icon="security"',
+        for needle in ('Allergy Hold', 'Cleared', 'text-warning', 'data-icon="medical_services"', 'cp-beat-fade', 'data-icon="security"',
                        'cp-pulse', 'action_generate_invoice', 'action_view_invoice'):
             self.assertIn(needle, arch)
         self.assertEqual(arch.count('name="action_open_pharmacy_wizard"'), 4)
@@ -566,4 +568,31 @@ class TestDischargeFlow(TransactionCase):
         msg = d.message_post(body="Released by <b>Admin</b> <script>x</script>")
         self.assertIn('<b>Admin</b>', str(msg.body))
         self.assertNotIn('<script>', str(msg.body))
+
+    # ------------------------------------------------------------ duplicate-proofing + Phase 10 layout
+    def test_37_item_listed_once_per_discharge(self):
+        d = self.discharge
+        with self.assertRaises(ValidationError):
+            d.supply_line_ids = [(0, 0, {'item_name': ' gauze ', 'surgical_qty_used': 1})]  # same item, any case
+        self.assertEqual(len(d.supply_line_ids), 2)
+
+    def test_38_demo_seed_is_idempotent_and_uses_the_patient_name(self):
+        demo = self.env.ref('clearpath_discharge.demo_discharge_pt402')
+        for _ in range(3):  # re-seeding (reset / hook) must never stack copies
+            demo._seed_demo_content()
+        self.assertEqual(len(demo.medication_line_ids), 1)
+        self.assertEqual(len(demo.supply_line_ids), 2)
+        self.assertIn(demo.patient_id.name, demo.raw_handoff_note)
+        self.assertNotIn('John Doe', demo.raw_handoff_note)
+
+    def test_39_banner_short_hash_and_gate_pill(self):
+        d = self._locked()
+        self.assertEqual(d.short_revision_hash, '#' + d.revision_hash[:8])
+        self.assertEqual(len(d.short_revision_hash), 9)
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        for needle in ('o_cp_banner', 'short_revision_hash', 'Gate Locked', 'Gate Unlocked',
+                       'Doctor Voice Dictation', 'Nurse Supply Sheet Checklist', 'Structured AI Discharge Summary',
+                       'btn-light border btn-sm'):
+            self.assertIn(needle, arch)
 

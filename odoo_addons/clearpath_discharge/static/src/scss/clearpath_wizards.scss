@@ -163,17 +163,29 @@
     display: none !important;
 }
 
-// Taller smart buttons (ALL of ours: alerts, pharmacy, billing, insurance, invoice) so the count, icon and
-// label fit inside the box. Odoo's button box is `.o-form-buttonbox` and fixes the stat button height at
-// md and up, hence the specific selector + !important.
+// Smart buttons (alerts, pharmacy, billing, insurance, invoice): compact cards with a coloured top edge per
+// state. Odoo's button box is `.o-form-buttonbox` and fixes the stat button height at md and up, hence the
+// specific selector + !important.
 .o_form_view .o-form-buttonbox .oe_stat_button.o_cp_stat {
     height: auto !important;
-    min-height: 7rem !important;
-    padding: .9rem .6rem !important;
+    min-height: 5rem !important;
+    padding: .55rem .6rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     overflow: visible !important;
+    background: var(--bs-body-bg);
+    border-top: 3px solid transparent;
+    transition: background-color .15s ease, box-shadow .15s ease;
+
+    &:hover {
+        background: var(--bs-tertiary-bg);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, .10);
+    }
+    &.o_cp_stat_flagged { border-top-color: var(--bs-danger); background: rgba(var(--bs-danger-rgb), .07); }
+    &.o_cp_stat_approved { border-top-color: var(--bs-success); background: rgba(var(--bs-success-rgb), .07); }
+    &.o_cp_stat_stale { border-top-color: var(--bs-warning); background: rgba(var(--bs-warning-rgb), .09); }
+    &.o_cp_stat_pending { border-top-color: var(--bs-secondary); }
 
     .o_stat_info {
         overflow: visible !important;
@@ -182,9 +194,23 @@
         text-align: center;
     }
     .o_stat_value, .o_stat_text {
-        line-height: 1.35 !important;
+        line-height: 1.25 !important;
         white-space: nowrap;
         overflow: visible !important;
     }
+    .o_stat_text {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--bs-body-color);
+    }
+    .o_stat_value.fs-4 { font-weight: 700; line-height: 1; }
     .o_button_icon { margin-right: .35rem; }
+}
+
+// Patient & governance banner: fields sit inline next to their labels.
+.o_cp_banner .o_field_widget {
+    width: auto !important;
+    display: inline-block;
 }

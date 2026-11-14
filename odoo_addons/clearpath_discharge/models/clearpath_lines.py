@@ -1,5 +1,5 @@
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 CLINICAL_LINE_FIELDS = {'drug_name', 'dosage', 'frequency'}
 # billed_qty is intentionally NOT here: billing fixes it after lock without a new revision.
@@ -57,6 +57,17 @@ class ClearpathSupplyLine(models.Model):
         string="Unbilled Qty", compute='_compute_discrepancy', store=True,
     )
     is_flagged = fields.Boolean(string="Flagged", compute='_compute_discrepancy', store=True)
+
+    @api.constrains('item_name', 'discharge_id')
+    def _check_unique_item(self):
+        """An item appears once per discharge (case-insensitive): edit its quantity instead of repeating it."""
+        for line in self:
+            name = (line.item_name or '').strip().lower()
+            others = self.search([('discharge_id', '=', line.discharge_id.id), ('id', '!=', line.id)])
+            if any((o.item_name or '').strip().lower() == name for o in others):
+                raise ValidationError(
+                    "%s is already listed for this discharge. Edit its quantity instead of adding it again."
+                    % line.item_name)
 
     @api.depends('surgical_qty_used', 'billed_qty')
     def _compute_discrepancy(self):

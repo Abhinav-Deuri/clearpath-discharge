@@ -107,20 +107,20 @@ def test_pruner_strips_orm_metadata_and_pii():
     req = DraftRequest(
         discharge_id=402,
         patient_code="PT-402",
-        patient_name="John Doe",
+        patient_name="Arabith",
         bed_number="402",
-        raw_handoff_note="John Doe tolerated appendectomy well. Start Amoxicillin 500mg.",
+        raw_handoff_note="Arabith tolerated appendectomy well. Start Amoxicillin 500mg.",
         medications=[MedicationItem(drug_name="Amoxicillin", dosage="500mg", frequency="TID")],
         create_uid=[2, "Administrator"],
         write_date="2026-11-13 10:00:00",
         __last_update="2026-11-13 10:00:00",
         message_ids=[1, 2, 3, 4, 5, 6, 7, 8],
         message_follower_ids=[9, 10, 11],
-        display_name="John Doe / Bed 402",
+        display_name="Arabith / Bed 402",
     )
     pruned, stats = prune_and_anonymize(req)
     flat = str(pruned)
-    assert "John Doe" not in flat
+    assert "Arabith" not in flat
     assert "PT-402" in flat
     for junk in ("create_uid", "write_date", "__last_update", "message_ids", "display_name"):
         assert junk not in flat
@@ -141,9 +141,9 @@ def test_draft_endpoint_mock(client):
         json={
             "discharge_id": 402,
             "patient_code": "PT-402",
-            "patient_name": "John Doe",
+            "patient_name": "Arabith",
             "bed_number": "402",
-            "raw_handoff_note": "John Doe post-op appendectomy, start Amoxicillin 500mg.",
+            "raw_handoff_note": "Arabith post-op appendectomy, start Amoxicillin 500mg.",
             "medications": [{"drug_name": "Amoxicillin", "dosage": "500mg", "frequency": "TID"}],
             "create_uid": [2, "Administrator"],
             "message_ids": list(range(30)),
@@ -152,7 +152,7 @@ def test_draft_endpoint_mock(client):
     assert r.status_code == 200
     body = r.json()
     assert body["used_mock"] is True
-    assert "John Doe" not in body["ai_draft_summary"]
+    assert "Arabith" not in body["ai_draft_summary"]
     assert "PT-402" in body["ai_draft_summary"]
     assert body["review_prompts"]
     assert body["token_stats"]["saved_pct"] > 0
@@ -315,12 +315,12 @@ def test_old_snapshot_without_insurance_still_parses():
 def test_transcribe_and_draft_mock(client):
     r = client.post("/api/v1/transcribe-and-draft", json={
         "discharge_id": 402, "audio_base64": AUDIO_B64, "filename": "demo_voice.wav",
-        "patient_code": "PT-402", "patient_name": "John Doe", "bed_number": "402",
+        "patient_code": "PT-402", "patient_name": "Arabith", "bed_number": "402",
     })
     assert r.status_code == 200, r.text
     body = r.json()
     assert "Amoxicillin 500mg" in body["transcribed_text"]
-    assert "John Doe" not in body["ai_draft_summary"] and "PT-402" in body["ai_draft_summary"]
+    assert "Arabith" not in body["ai_draft_summary"] and "PT-402" in body["ai_draft_summary"]
     meds = {(m["drug_name"], m["dosage"], m["frequency"]) for m in body["proposed_medications"]}
     assert ("Amoxicillin", "500mg", "TID") in meds
     assert body["used_mock"] is True

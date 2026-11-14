@@ -4,6 +4,7 @@
     'summary': "AI-assisted surgical discharge with pharmacy and billing sign-off",
     'depends': ['base', 'mail', 'contacts', 'account'],
     'application': True,
+    'post_init_hook': '_post_init_seed_demo',
     'installable': True,
     'author': 'ClearPath',
     'license': 'LGPL-3',

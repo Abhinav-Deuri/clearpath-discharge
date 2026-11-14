@@ -15,12 +15,22 @@ _logger = logging.getLogger(__name__)
 # Editing any of these on a locked discharge triggers the Stale-Write Guard.
 CLINICAL_FIELDS = {'raw_handoff_note', 'ai_draft_summary'}
 
-DEMO_NOTE = (
-    "Rounds note - Bed 402, John Doe, POD1 laparoscopic appendectomy. Uncomplicated course, afebrile, "
+# Demo content lives here ONLY (not in demo XML): noupdate XML records that were deleted get re-created on every
+# module upgrade, which is how the demo supply lines used to double up. The patient's real name and bed are
+# filled in at seed time, so renaming the demo patient never leaves a stale name in the note.
+DEMO_NOTE_TEMPLATE = (
+    "Rounds note - Bed {bed}, {name}, POD1 laparoscopic appendectomy. Uncomplicated course, afebrile, "
     "pain controlled on oral analgesia, tolerating regular diet, ambulating independently. Incisions "
     "clean and dry. Plan: discharge home today. Start Amoxicillin 500mg three times daily for 5 days as "
     "post-operative prophylaxis. Surgical clinic follow-up in 2 weeks."
 )
+DEMO_MEDICATIONS = [
+    {'drug_name': 'Amoxicillin', 'dosage': '500mg', 'frequency': 'TID'},
+]
+DEMO_SUPPLIES = [
+    {'item_name': 'Hemostatic Gauze Pad', 'surgical_qty_used': 4, 'billed_qty': 2, 'price_unit': 12.5},
+    {'item_name': 'Skin Stapler', 'surgical_qty_used': 1, 'billed_qty': 0, 'price_unit': 85.0},
+]
 
 GROUP_DOCTOR = 'clearpath_discharge.group_clearpath_doctor'
 GROUP_PHARMACIST = 'clearpath_discharge.group_clearpath_pharmacist'
@@ -161,7 +171,8 @@ def summary_to_html(text):
                ' color:#dc3545; font-weight:600;' if alert else '', value))
 
     head = ''
-    if title:
+    # The form puts "Discharge Summary" in its own card header; other places keep the card title.
+    if title and not title.lower().startswith('discharge summary'):
         head = ('<div style="padding:10px 14px; font-weight:700; font-size:15px; background:rgba(13,110,253,.10);">'
                 '<i class="oi" data-icon="description" style="color:#0d6efd;"/> %s</div>' % escape(title))
     return Markup(
@@ -262,6 +273,7 @@ class ClearpathDischarge(models.Model):
     invoice_id = fields.Many2one('account.move', string="Generated Invoice", readonly=True, copy=False)
     invoice_label = fields.Char(compute='_compute_invoice_label')
     alert_count = fields.Integer(compute='_compute_alert_count')
+    short_revision_hash = fields.Char(compute='_compute_short_revision_hash')
     show_audit_log = fields.Boolean(string="Show Audit Log", default=False, copy=False)
     top_alert_kind = fields.Selection(
         [('pharmacy', 'Pharmacy'), ('billing', 'Billing'), ('insurance', 'Insurance')],
@@ -452,6 +464,11 @@ class ClearpathDischarge(models.Model):
         )
         return hashlib.sha256(blob.encode()).hexdigest()
 
+    @api.depends('revision_hash')
+    def _compute_short_revision_hash(self):
+        for rec in self:
+            rec.short_revision_hash = ('#' + rec.revision_hash[:8]) if rec.revision_hash else False
+
     def action_toggle_audit_log(self):
         """Show / hide the chatter (audit history) on the form; hidden by default for a clean demo."""
         for record in self:
@@ -592,9 +609,24 @@ class ClearpathDischarge(models.Model):
             ) % (reason, old_rev, " (snapshot %s)" % old_snapshot if old_snapshot else "", old_rev + 1))
 
     # ------------------------------------------------------------ demo helper
+    def _seed_demo_content(self):
+        """(Re)build the demo note, medications and supplies from the constants above. Idempotent: the old
+        lines are removed first, so running it twice never leaves duplicates."""
+        for rec in self:
+            ctx = rec.sudo().with_context(clearpath_skip_guard=True)
+            ctx.medication_line_ids.unlink()
+            ctx.supply_line_ids.unlink()
+            ctx.env['clearpath.medication.line'].create(
+                [dict(m, discharge_id=rec.id) for m in DEMO_MEDICATIONS])
+            ctx.env['clearpath.supply.line'].create(
+                [dict(s, discharge_id=rec.id) for s in DEMO_SUPPLIES])
+            ctx.write({'raw_handoff_note': DEMO_NOTE_TEMPLATE.format(
+                bed=rec.patient_id.bed_number or '?', name=rec.patient_id.name or 'the patient')})
+
     def action_reset_demo(self):
         """Demo: return the PT-402 record to a clean Rev 1 draft and clear the sidecar's memory of it."""
         self.ensure_one()
+        self._single_flight(7424)  # a double click must not run two resets at once
         if not (self.env.is_superuser() or self.env.user._is_admin()):
             raise UserError("Only an administrator can reset the demo.")
         if self.patient_id.patient_code != 'PT-402':
@@ -607,19 +639,10 @@ class ClearpathDischarge(models.Model):
         if ctx.invoice_id.state == 'draft':
             ctx.invoice_id.unlink()  # a posted invoice stays in Invoicing; only the link is dropped
         ctx.write({'invoice_id': False})
-        ctx.medication_line_ids.unlink()
-        ctx.supply_line_ids.unlink()
-        ctx.env['clearpath.medication.line'].create(
-            {'discharge_id': self.id, 'drug_name': 'Amoxicillin', 'dosage': '500mg', 'frequency': 'TID'})
-        ctx.env['clearpath.supply.line'].create([
-            {'discharge_id': self.id, 'item_name': 'Hemostatic Gauze Pad', 'surgical_qty_used': 4, 'billed_qty': 2,
-             'price_unit': 12.5},
-            {'discharge_id': self.id, 'item_name': 'Skin Stapler', 'surgical_qty_used': 1, 'billed_qty': 0,
-             'price_unit': 85.0},
-        ])
+        ctx._seed_demo_content()
         ctx.write({
             'state': 'draft', 'revision_id': 1, 'revision_hash': False, 'sidecar_snapshot_id': False,
-            'raw_handoff_note': DEMO_NOTE, 'ai_draft_summary': False, 'review_prompts': False,
+            'ai_draft_summary': False, 'review_prompts': False,
             'token_savings_summary': False, 'pharmacy_status': 'pending', 'billing_status': 'pending',
             'pharmacy_summary': False, 'billing_summary': False, 'coordinator_gate_locked': True,
             'pharmacist_id': False, 'pharmacy_approved_on': False, 'billing_officer_id': False,
