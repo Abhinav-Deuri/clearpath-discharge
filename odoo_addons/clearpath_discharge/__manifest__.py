@@ -17,4 +17,10 @@
         "views/clearpath_menus.xml",
         "data/demo_patient_pt402.xml",
     ],
+
+    'assets': {
+        'web.assets_backend': [
+            'clearpath_discharge/static/src/voice_recorder/voice_recorder.js',
+        ],
+    },
 }

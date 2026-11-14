@@ -160,7 +160,7 @@
                     <group string="Multimodal Bedside Inputs" invisible="state != 'draft'"
                            groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse">
                         <group>
-                            <field name="voice_note_audio" filename="voice_note_filename" widget="binary"
+                            <field name="voice_note_audio" filename="voice_note_filename" widget="wav_recorder"
                                    string="Doctor voice note"/>
                             <field name="voice_note_filename" invisible="1"/>
                             <div colspan="2">

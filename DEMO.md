@@ -6,7 +6,7 @@
 3. Open http://localhost:8069 (admin / admin) -> ClearPath Discharge -> Discharges -> **PT-402 Discharge**.
 4. If it is not a clean Rev 1 draft: click **Reset Demo**.
 5. Voice and photo scan are LIVE when `.env` has the `ASR_*` / `VISION_*` values (NVIDIA Riva Parakeet + Nemotron VL).
-   Voice needs a **.wav** file (other formats fall back to the demo transcript). Any image works for the scan.
+   The voice field has a **Record voice note** button (browser microphone, works on localhost) and an **Upload audio file** button; any audio format is converted to WAV in the browser. Any image works for the scan.
    With `.\demo-mode.ps1 mock`, or blank `ASR_*` / `VISION_*`, any file returns the PT-402 demo transcript and counts.
 
 The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, Insurance Officer, Coordinator), so every button is on one screen.
