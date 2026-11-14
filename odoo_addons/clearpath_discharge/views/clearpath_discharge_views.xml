@@ -62,41 +62,46 @@
             <form string="Discharge">
                 <header>
                     <!-- Stage 1: doctor -->
-                    <button name="action_generate_ai_draft" type="object" string="Generate AI Draft"
+                    <button name="action_generate_ai_draft" type="object" icon="fa-magic" string="Generate AI Draft"
                             invisible="state != 'draft'" groups="clearpath_discharge.group_clearpath_doctor"/>
                     <!-- Stage 2: HITL gate - doctor locks the revision -->
-                    <button name="action_lock_revision_and_verify" type="object"
+                    <button name="action_lock_revision_and_verify" type="object" icon="fa-lock"
                             string="Lock Revision &amp; Run Checks" class="btn-primary"
                             invisible="state != 'draft' or not ai_draft_summary"
                             groups="clearpath_discharge.group_clearpath_doctor"/>
                     <!-- Stage 3 (departmental sign-offs) now lives in the stat-button pop-ups -->
                     <!-- Stage 4: HITL gate #2 - coordinator -->
-                    <button name="action_coordinator_release" type="object"
+                    <button name="action_coordinator_release" type="object" icon="fa-paper-plane"
                             string="Release Discharge Packet" class="btn-success"
                             invisible="state != 'cleared' or coordinator_gate_locked"
                             groups="clearpath_discharge.group_clearpath_coordinator"/>
                     <!-- Demo helper: trigger the Stale-Write Guard live -->
-                    <button name="action_simulate_late_doctor_edit" type="object"
+                    <button name="action_simulate_late_doctor_edit" type="object" icon="fa-bolt"
                             string="Simulate Late Doctor Edit (Trigger Stale-Write Guard)"
                             class="btn-warning"
                             invisible="state in ('draft', 'released')"
                             groups="clearpath_discharge.group_clearpath_doctor"
                             confirm="Replace Amoxicillin with Azithromycin and bump the revision?"/>
-                    <button name="action_reset_demo" type="object" string="Reset Demo"
+                    <button name="action_reset_demo" type="object" icon="fa-undo" string="Reset Demo"
                             class="btn-outline-secondary" groups="base.group_system"
                             invisible="state == 'draft' and revision_id == 1 and not ai_draft_summary"
                             confirm="Reset this discharge to a clean Rev 1 draft?"/>
-                    <button name="%(action_report_discharge_packet)d" type="action"
+                    <button name="%(action_report_discharge_packet)d" type="action" icon="fa-file-pdf-o"
                             string="Download PDF Report" class="btn-secondary"
                             invisible="not ai_draft_summary"/>
                     <field name="state" widget="statusbar"
-                           statusbar_visible="draft,flagged,cleared,released"/>
+                           statusbar_visible="draft,flagged,cleared,released"
+                           invisible="state == 'released'"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <field name="pharmacy_conflict_count" invisible="1"/>
                         <field name="unbilled_item_count" invisible="1"/>
                         <field name="insurance_hold_count" invisible="1"/>
+                        <button name="action_open_alerts_wizard" type="object" class="oe_stat_button"
+                                icon="fa-bell" invisible="alert_count == 0">
+                            <field name="alert_count" widget="statinfo" string="Alerts"/>
+                        </button>
                         <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button"
                                 icon="fa-medkit" invisible="state == 'draft'">
                             <div class="o_stat_info">
@@ -137,57 +142,21 @@
                     <widget name="web_ribbon" title="Released" bg_color="text-bg-success"
                             invisible="state != 'released'"/>
 
-                    <div class="alert alert-danger" role="alert"
-                         invisible="pharmacy_status != 'flagged'">
-                        <strong>Pharmacy safety conflict.</strong>
-                        <field name="pharmacy_summary" readonly="1" nolabel="1" class="d-inline"/>
-                        Open the Pharmacy button for details. Change the medication to create a new revision,
-                        then re-run checks.
-                    </div>
-                    <div class="alert alert-warning" role="alert"
-                         invisible="billing_status != 'flagged'">
-                        <strong>Surgical billing discrepancy.</strong>
-                        <field name="billing_summary" readonly="1" nolabel="1" class="d-inline"/>
-                        Open the Billing button, correct the billed quantities, then sign off.
-                    </div>
-                    <div class="alert alert-warning" role="alert"
-                         invisible="pharmacy_status != 'stale' and billing_status != 'stale' and insurance_status != 'stale'">
-                        <strong>Stale-Write Guard:</strong> the record was edited after locking. The previous
-                        checks and sign-offs are invalid. Lock this revision again to re-verify.
-                    </div>
-                    <div class="alert alert-warning" role="alert"
-                         invisible="insurance_status != 'flagged'">
-                        <strong>TPA insurance claim on hold.</strong>
-                        Open the Insurance button. The claim is released for admin sign-off only after
-                        every discrepancy is reconciled.
-                    </div>
-                    <div class="alert alert-success" role="alert"
-                         invisible="state != 'cleared' or coordinator_gate_locked">
-                        <strong>Release gate open.</strong> Pharmacy, Billing and Insurance all approved this revision.
-                    </div>
-
-                    <div class="alert alert-info d-flex align-items-center gap-2" role="alert"
-                         invisible="not token_savings_summary">
-                        <i class="fa fa-bolt"/>
-                        <span><strong>Token savings before AI call:</strong>
-                            <field name="token_savings_summary" readonly="1" nolabel="1" class="d-inline"/></span>
-                    </div>
-
                     <div class="oe_title">
-                        <h1><field name="name" readonly="1"/></h1>
+                        <h1 class="d-flex align-items-center"><i class="fa fa-user-md text-primary me-2"/><field name="name" readonly="1"/></h1>
                     </div>
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <span class="badge rounded-pill text-bg-primary fs-6">
-                            Revision ID: Rev <field name="revision_id" class="oe_inline"/>
+                            <i class="fa fa-code-fork"/> Revision ID: Rev <field name="revision_id" class="oe_inline"/>
                         </span>
                         <span class="badge rounded-pill text-bg-secondary fs-6"
                               invisible="not revision_hash">
-                            Snapshot Hash: <field name="sidecar_snapshot_id" class="oe_inline"
+                            <i class="fa fa-hashtag"/> Snapshot Hash: <field name="sidecar_snapshot_id" class="oe_inline"
                                                   invisible="not sidecar_snapshot_id"/>
                         </span>
                     </div>
 
-                    <group string="Multimodal Bedside Inputs" invisible="state != 'draft'"
+                    <group string="&#127908; Multimodal Bedside Inputs" invisible="state != 'draft'"
                            groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse">
                         <group>
                             <field name="voice_note_audio" filename="voice_note_filename" widget="wav_recorder"

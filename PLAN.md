@@ -251,7 +251,8 @@ The discharge form has 6 notebook tabs plus 3 header sign-off buttons. Pharmacy,
 - Odoo 20 view quirks (`<list>`, `invisible=` expressions, no `attrs`) — caught by steps 1 and 3.
 - Removing the old model methods: only tests and the three form buttons call them.
 
-### Phase 6 as built
+### Phase 6 as built (+ alerts pop-up)
 - Billing pop-up uses a small transient line model (`clearpath.billing.approval.line`) instead of a writable related One2many: Odoo drops row edits on a related x2many at create time. The Billed column is copied back to the supply lines on **Approve & Resolve** (never bumps the revision).
 - Odoo 20 needs `ir.access.csv` rows for transient models too (3 wizards + the line model, 6 groups each).
 - Verified: 24 Odoo tests, full shell flow through the three pop-ups, all four views compile. Not click-tested in a browser.
+- Inline alert banners moved into a "Review Alerts" pop-up (`clearpath.alerts.wizard`, bell stat button with count). Lock & Run Checks and Simulate Late Edit open it automatically when something needs attention. Status bar hidden once released; icons added to header buttons, title and badges.

@@ -295,4 +295,47 @@
         <field name="view_id" ref="clearpath_insurance_wizard_view_form"/>
         <field name="target">new</field>
     </record>
+
+    <!-- ===================================================================== ALERTS -->
+    <record id="clearpath_alerts_wizard_view_form" model="ir.ui.view">
+        <field name="name">clearpath.alerts.wizard.form</field>
+        <field name="model">clearpath.alerts.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Review Alerts" create="0" delete="0" duplicate="0">
+                <field name="discharge_id" invisible="1"/>
+                <sheet class="o_clearpath_wizard o_cp_alerts">
+                    <div class="o_cp_hero">
+                        <div class="o_cp_hero_icon"><i class="fa fa-bell"/></div>
+                        <div class="o_cp_hero_text">
+                            <div class="o_cp_hero_title">Review Alerts</div>
+                            <div class="o_cp_hero_sub">
+                                <field name="patient_name" class="d-inline"/> &#183;
+                                <field name="patient_code" class="d-inline"/> &#183; Bed
+                                <field name="bed_number" class="d-inline"/> &#183; Rev
+                                <field name="revision_id" class="d-inline"/>
+                            </div>
+                        </div>
+                    </div>
+                    <field name="alerts_html" nolabel="1"/>
+                </sheet>
+                <footer>
+                    <button name="action_open_pharmacy" type="object" string="Pharmacy" icon="fa-medkit"
+                            class="btn-secondary" invisible="pharmacy_status != 'flagged'"/>
+                    <button name="action_open_billing" type="object" string="Billing" icon="fa-calculator"
+                            class="btn-secondary" invisible="billing_status != 'flagged'"/>
+                    <button name="action_open_insurance" type="object" string="Insurance" icon="fa-shield"
+                            class="btn-secondary" invisible="insurance_status != 'flagged'"/>
+                    <button string="Got it" special="cancel" icon="fa-check" class="btn-primary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="alerts_wizard_action" model="ir.actions.act_window">
+        <field name="name">Review Alerts</field>
+        <field name="res_model">clearpath.alerts.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="clearpath_alerts_wizard_view_form"/>
+        <field name="target">new</field>
+    </record>
 </odoo>

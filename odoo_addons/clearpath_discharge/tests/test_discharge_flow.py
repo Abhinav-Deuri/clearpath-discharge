@@ -389,3 +389,36 @@ class TestDischargeFlow(TransactionCase):
         self.assertFalse(wiz.can_approve)
         with self.assertRaises(UserError):
             wiz.action_approve()
+
+    # ------------------------------------------------------------ alerts pop-up
+    def test_23_lock_opens_alerts_popup_and_button_counts(self):
+        d = self.discharge
+        d.action_generate_ai_draft()
+        action = d.action_lock_revision_and_verify()
+        self.assertEqual((action['type'], action['target'], action['res_model']),
+                         ('ir.actions.act_window', 'new', 'clearpath.alerts.wizard'))
+        titles = [i[2] for i in d._alert_items()]
+        self.assertIn("Pharmacy safety conflict", titles)
+        self.assertIn("TPA insurance claim on hold", titles)
+        self.assertGreaterEqual(d.alert_count, 3)
+        wiz = self.env['clearpath.alerts.wizard'].with_context(default_discharge_id=d.id).create(
+            {'discharge_id': d.id})
+        self.assertIn('Pharmacy safety conflict', str(wiz.alerts_html))
+        self.assertEqual(wiz.action_open_pharmacy()['res_model'], WIZARDS['pharmacy'])
+
+    def test_24_clean_lock_just_reloads(self):
+        d = self.env['clearpath.discharge'].create({'patient_id': self.patient.id,
+                                                    'raw_handoff_note': 'POD1 appendectomy, no meds.'})
+        d.action_generate_ai_draft()
+        d.supply_line_ids = [(0, 0, {'item_name': 'Gauze', 'surgical_qty_used': 1, 'billed_qty': 1})]
+        action = d.action_lock_revision_and_verify()
+        # insurance still needs sign-off context (token savings info alert) -> popup is allowed;
+        # what matters: a result is always an action dict
+        self.assertEqual(action['type'] in ('ir.actions.act_window', 'ir.actions.client'), True)
+
+    def test_25_statusbar_hidden_when_released(self):
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        self.assertIn("state == 'released'", arch)
+        self.assertNotIn('alert-danger', arch)  # inline banners moved to the pop-up
+

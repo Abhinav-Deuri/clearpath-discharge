@@ -163,6 +163,7 @@ class ClearpathDischarge(models.Model):
     pharmacy_button_text = fields.Char(compute='_compute_stat_buttons')
     billing_button_text = fields.Char(compute='_compute_stat_buttons')
     insurance_button_text = fields.Char(compute='_compute_stat_buttons')
+    alert_count = fields.Integer(compute='_compute_alert_count')
 
     # ------------------------------------------------------------------ helpers
     @api.depends('tpa_claim_document')
@@ -218,6 +219,47 @@ class ClearpathDischarge(models.Model):
             if text == "Clear" and rec.insurance_status == 'flagged':
                 text = "On Hold"
             rec.insurance_button_text = text
+
+    def _alert_items(self):
+        """What needs attention on this revision. Shown in the Review Alerts pop-up, not inline."""
+        self.ensure_one()
+        items = []
+        if self.pharmacy_status == 'flagged':
+            items.append(('danger', 'fa-exclamation-triangle', "Pharmacy safety conflict",
+                          "%s Open the Pharmacy button for details. Change the medication to create a "
+                          "new revision, then re-run checks." % (self.pharmacy_summary or "")))
+        if self.billing_status == 'flagged':
+            items.append(('warning', 'fa-calculator', "Surgical billing discrepancy",
+                          "%s Open the Billing button, correct the billed quantities, then sign off."
+                          % (self.billing_summary or "")))
+        if self.insurance_status == 'flagged':
+            items.append(('warning', 'fa-pause-circle', "TPA insurance claim on hold",
+                          "Open the Insurance button. The claim is released for admin sign-off only after "
+                          "every discrepancy is reconciled."))
+        if 'stale' in (self.pharmacy_status, self.billing_status, self.insurance_status):
+            items.append(('secondary', 'fa-refresh', "Stale-Write Guard",
+                          "The record was edited after locking. The previous checks and sign-offs are "
+                          "invalid. Lock this revision again to re-verify."))
+        if self.state == 'cleared' and not self.coordinator_gate_locked:
+            items.append(('success', 'fa-unlock-alt', "Release gate open",
+                          "Pharmacy, Billing and Insurance all approved this revision."))
+        if self.token_savings_summary:
+            items.append(('info', 'fa-bolt', "Token savings before AI call", self.token_savings_summary))
+        return items
+
+    @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
+                 'coordinator_gate_locked', 'token_savings_summary')
+    def _compute_alert_count(self):
+        for rec in self:
+            rec.alert_count = len(rec._alert_items())
+
+    def action_open_alerts_wizard(self):
+        return self._open_wizard('clearpath_discharge.alerts_wizard_action', size='medium')
+
+    def _alerts_action_or_reload(self):
+        """After lock / late edit: pop the alerts up (the form refreshes when it closes)."""
+        self.ensure_one()
+        return self.action_open_alerts_wizard() if self._alert_items() else self._soft_reload()
 
     @api.depends('patient_id.patient_code')
     def _compute_name(self):
@@ -425,7 +467,7 @@ class ClearpathDischarge(models.Model):
             self.action_generate_ai_draft()
         except UserError as exc:
             self.message_post(body="AI draft not regenerated (%s). Regenerate it before re-locking." % exc.args[0])
-        return self._soft_reload()
+        return self._alerts_action_or_reload()
 
     # ------------------------------------------------------------ Stage 1: draft
     def action_generate_ai_draft(self):
@@ -517,7 +559,7 @@ class ClearpathDischarge(models.Model):
             insurance_result=snapshot.get('insurance_output'),
             audit_packet=snapshot,
         )
-        return self._soft_reload()
+        return self._alerts_action_or_reload()
 
     # ---------------------------------------------- Stage 3: apply sidecar results
     def apply_mcp_findings(self, revision_id, revision_hash, pharmacy_result, billing_result,
@@ -673,10 +715,10 @@ class ClearpathDischarge(models.Model):
         return out
 
     # ---------------------------------- Phase 6: smart buttons -> department pop-ups
-    def _open_wizard(self, xmlid):
+    def _open_wizard(self, xmlid, size='large'):
         self.ensure_one()
         action = self.env['ir.actions.act_window']._for_xml_id(xmlid)
-        action['context'] = {'default_discharge_id': self.id, 'dialog_size': 'large'}
+        action['context'] = {'default_discharge_id': self.id, 'dialog_size': size}
         return action
 
     def action_open_pharmacy_wizard(self):
