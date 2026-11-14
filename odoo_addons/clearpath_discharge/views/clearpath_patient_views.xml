@@ -61,6 +61,18 @@
                                 </list>
                             </field>
                         </page>
+                        <page string="Past Medical &amp; Surgical History" name="history">
+                            <field name="history_ids">
+                                <list editable="bottom" decoration-muted="status == 'resolved'">
+                                    <field name="condition_name"/>
+                                    <field name="history_type"/>
+                                    <field name="diagnosis_date"/>
+                                    <field name="status" widget="badge"
+                                           decoration-warning="status == 'active'"
+                                           decoration-success="status == 'resolved'"/>
+                                </list>
+                            </field>
+                        </page>
                         <page string="Discharges" name="discharges">
                             <field name="discharge_ids" readonly="1">
                                 <list>

@@ -2,6 +2,12 @@
     <menuitem id="clearpath_menu_root" name="ClearPath Discharge" sequence="10"/>
     <menuitem id="clearpath_menu_discharges" name="Discharges" parent="clearpath_menu_root"
               action="clearpath_discharge_action" sequence="10"/>
+    <menuitem id="clearpath_menu_pharmacy_queue" name="Pharmacy Queue" parent="clearpath_menu_root"
+              action="clearpath_discharge_action_pharmacy_queue" sequence="12" groups="clearpath_discharge.group_clearpath_pharmacist,base.group_system"/>
+    <menuitem id="clearpath_menu_billing_queue" name="Billing Queue" parent="clearpath_menu_root"
+              action="clearpath_discharge_action_billing_queue" sequence="14" groups="clearpath_discharge.group_clearpath_billing,base.group_system"/>
+    <menuitem id="clearpath_menu_insurance_queue" name="Insurance Queue" parent="clearpath_menu_root"
+              action="clearpath_discharge_action_insurance_queue" sequence="16" groups="clearpath_discharge.group_clearpath_admin,base.group_system"/>
     <menuitem id="clearpath_menu_patients" name="Patients" parent="clearpath_menu_root"
               action="clearpath_patient_action" sequence="20"/>
 </odoo>

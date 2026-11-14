@@ -13,6 +13,7 @@ from schemas import (
     DraftRequest,
     MedicationItem,
     SupplyItem,
+    TokenStats,
     VerifyRequest,
 )
 from services import mcp_tools
@@ -443,3 +444,125 @@ def test_notify_sms_endpoint(client, monkeypatch):
         "tracking_token": TOKEN, "to_number": "+971501234567", "stage_event": "released"})
     assert res.status_code == 200 and "cleared to go home" in res.json()["message_preview"]
     assert client.post("/api/v1/notify-sms", json={"tracking_token": "x"}).status_code == 422
+
+
+# ---------------------------------------------------------------- Phase 13: past medical / surgical history
+HISTORY = [
+    {"condition_name": "Type 2 Diabetes", "history_type": "medical", "status": "active", "diagnosis_date": "2015"},
+    {"condition_name": "Open Cholecystectomy", "history_type": "surgical", "status": "resolved",
+     "diagnosis_date": "2018"},
+]
+
+
+def _draft_context(history=None) -> dict:
+    return {
+        "patient_code": "PT-402", "bed_number": "402",
+        "raw_handoff_note": "POD1 laparoscopic appendectomy. Start Amoxicillin 500mg TID.",
+        "medications": [{"drug_name": "Amoxicillin", "dosage": "500mg", "frequency": "TID"}],
+        "allergies": [{"allergen": "Penicillin", "reaction": "Anaphylaxis", "criticality": "high"}],
+        "past_medical_history": history or [],
+    }
+
+
+def test_mock_draft_lists_history_and_adapts_plan_for_diabetes():
+    from services.ai_llm_client import _mock_draft
+    summary, prompts, _ = _mock_draft(_draft_context(HISTORY))
+    assert "**Past Medical History**: Type 2 Diabetes (2015, active)" in summary
+    assert "**Past Surgical History**: Open Cholecystectomy (2018, resolved)" in summary
+    plan = next(ln for ln in summary.splitlines() if ln.startswith("- **Plan**"))
+    assert "monitor blood glucose closely" in plan and "post-operative stress" in plan
+    assert "Type 2 Diabetes control" in summary.splitlines()[-1]  # follow-up line
+    assert any("active conditions" in p for p in prompts)
+
+
+def test_mock_draft_without_history_has_no_history_sections():
+    from services.ai_llm_client import _mock_draft
+    summary, prompts, _ = _mock_draft(_draft_context())
+    assert "Past Medical History" not in summary and "Past Surgical History" not in summary
+    assert "**Plan**" not in summary
+    assert not any("active conditions" in p for p in prompts)
+
+
+def test_resolved_or_surgical_history_adds_no_condition_advice():
+    from services.ai_llm_client import _mock_draft
+    resolved = [dict(HISTORY[0], status="resolved"), HISTORY[1]]
+    summary, _, _ = _mock_draft(_draft_context(resolved))
+    assert "blood glucose" not in summary and "**Plan**" not in summary
+    assert "Type 2 Diabetes (2015, resolved)" in summary
+
+
+def test_other_chronic_conditions_get_their_own_advice():
+    from services.ai_llm_client import _mock_draft
+    hx = [{"condition_name": "Hypertension", "history_type": "medical", "status": "active"}]
+    summary, _, _ = _mock_draft(_draft_context(hx))
+    assert "check blood pressure regularly" in summary
+
+
+def test_system_prompt_requires_history_and_plan_adaptation():
+    from services.ai_llm_client import _SYSTEM_PROMPT
+    for needle in ("Past Medical History", "Past Surgical History", "monitor blood glucose closely",
+                   "do not invent medication changes"):
+        assert needle in _SYSTEM_PROMPT
+
+
+def test_history_schema_is_lightweight_and_strict():
+    from pydantic import ValidationError
+    from schemas import HistoryItem
+    item = HistoryItem(condition_name="Asthma")
+    assert (item.history_type, item.status) == ("medical", "active")
+    with pytest.raises(ValidationError):
+        HistoryItem(condition_name="Asthma", create_uid=1)
+
+
+def test_pruner_keeps_declared_history_and_drops_nothing_clinical():
+    req = DraftRequest(discharge_id=1, patient_code="PT-402", patient_name="Arabith", raw_handoff_note="note",
+                       past_medical_history=HISTORY)
+    pruned, _ = prune_and_anonymize(req)
+    assert [h["condition_name"] for h in pruned["past_medical_history"]] == [
+        "Type 2 Diabetes", "Open Cholecystectomy"]
+
+
+def test_pruner_maps_raw_odoo_history_rows_to_history_items():
+    raw_rows = [
+        {"id": 7, "create_uid": [1, "Admin"], "write_date": "2026-01-01", "patient_id": [1, "Arabith"],
+         "display_name": "Type 2 Diabetes", "condition_name": "Type 2 Diabetes", "history_type": "medical",
+         "diagnosis_date": "2015", "status": "active"},
+        {"id": 8, "condition_name": "", "history_type": "medical"},  # blank rows are ignored
+    ]
+    req = DraftRequest(discharge_id=1, patient_code="PT-402", patient_name="Arabith", raw_handoff_note="note",
+                       orm_history=raw_rows)
+    pruned, stats = prune_and_anonymize(req)
+    assert pruned["past_medical_history"] == [
+        {"condition_name": "Type 2 Diabetes", "history_type": "medical", "status": "active",
+         "diagnosis_date": "2015"}]
+    assert "orm_history" not in pruned and "create_uid" not in str(pruned) and "Arabith" not in str(pruned)
+    assert stats.before_tokens > stats.after_tokens
+
+
+def test_draft_endpoint_returns_history_and_glucose_advice(client):
+    body = {"discharge_id": 402, "patient_code": "PT-402", "patient_name": "Arabith", "bed_number": "402",
+            "raw_handoff_note": "POD1 laparoscopic appendectomy. Start Amoxicillin 500mg TID.",
+            "past_medical_history": HISTORY}
+    data = client.post("/api/v1/draft", json=body).json()
+    summary = data["ai_draft_summary"]
+    assert "Past Medical History" in summary and "Past Surgical History" in summary
+    assert "monitor blood glucose closely" in summary
+
+
+def test_live_llm_receives_the_history_in_its_context(monkeypatch):
+    from services import ai_llm_client
+    monkeypatch.setattr(settings, "use_mock_llm", False)
+    monkeypatch.setattr(settings, "ai_base_url", "http://llm.test")
+    monkeypatch.setattr(settings, "ai_api_key", "k")
+    seen = {}
+
+    async def fake_call(context):
+        seen.update(context)
+        return {"summary": "**Discharge Summary**\n- **Patient**: x", "review_prompts": [],
+                "proposed_medications": []}
+
+    monkeypatch.setattr(ai_llm_client, "_call_endpoint", fake_call)
+    stats = TokenStats(before_tokens=1, after_tokens=1, saved_tokens=0, saved_pct=0.0)
+    asyncio.run(ai_llm_client.generate_discharge_summary(_draft_context(HISTORY), 1, stats))
+    assert [h["condition_name"] for h in seen["past_medical_history"]] == [
+        "Type 2 Diabetes", "Open Cholecystectomy"]

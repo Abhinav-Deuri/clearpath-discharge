@@ -3,7 +3,7 @@ import json
 import math
 from typing import Any
 
-from schemas import DraftRequest, TokenStats
+from schemas import DraftRequest, HistoryItem, TokenStats
 
 # ORM / framework keys with no clinical value for the LLM.
 _DROP_KEYS = {
@@ -61,11 +61,31 @@ def _clean(value: Any, name: str, code: str) -> Any:
     return value
 
 
+def history_from_orm(rows: Any) -> list[dict]:
+    """Raw Odoo history rows (full ORM dumps) -> the lightweight HistoryItem shape."""
+    out = []
+    for row in rows if isinstance(rows, (list, tuple)) else []:
+        if not isinstance(row, dict) or not str(row.get("condition_name") or "").strip():
+            continue
+        try:
+            out.append(HistoryItem(
+                condition_name=str(row["condition_name"]).strip(),
+                history_type=str(row.get("history_type") or "medical"),
+                status=str(row.get("status") or "active"),
+                diagnosis_date=str(row.get("diagnosis_date") or ""),
+            ).model_dump())
+        except Exception:
+            continue
+    return out
+
+
 def prune_and_anonymize(req: DraftRequest) -> tuple[dict, TokenStats]:
     """Return (pruned_context, stats). PII (patient_name) never leaves the sidecar."""
     raw = req.model_dump()
     # Undeclared extra keys are raw Odoo ORM dumps: counted as "before", never sent on.
     declared = {k: v for k, v in raw.items() if k in DraftRequest.model_fields}
+    if not declared.get("past_medical_history"):  # only the raw ORM dump was sent: map it
+        declared["past_medical_history"] = history_from_orm(raw.get("orm_history"))
     pruned = _clean(declared, req.patient_name, req.patient_code)
     before = estimate_tokens(raw)
     after = estimate_tokens(pruned)

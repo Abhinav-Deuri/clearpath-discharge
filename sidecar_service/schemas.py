@@ -27,6 +27,14 @@ class SupplyItem(_Strict):
     billed_qty: int = Field(ge=0)
 
 
+class HistoryItem(_Strict):
+    """One past medical condition or past operation (lightweight: no ORM metadata)."""
+    condition_name: str
+    history_type: str = "medical"  # medical | surgical
+    status: str = "active"  # active | resolved
+    diagnosis_date: str = ""
+
+
 class TokenStats(_Strict):
     before_tokens: int
     after_tokens: int
@@ -54,6 +62,7 @@ class DraftRequest(BaseModel):
     medications: list[MedicationItem] = []
     allergies: list[AllergyItem] = []
     supplies: list[SupplyItem] = []
+    past_medical_history: list[HistoryItem] = []
 
 
 class DraftResponse(_Strict):
@@ -80,6 +89,7 @@ class VoiceDraftRequest(BaseModel):
     medications: list[MedicationItem] = []
     allergies: list[AllergyItem] = []
     supplies: list[SupplyItem] = []
+    past_medical_history: list[HistoryItem] = []
 
 
 class VoiceDraftResponse(DraftResponse):

@@ -345,3 +345,22 @@ Decisions that differ from the phase brief:
 - **SMS never blocks care**: a failed or unavailable SMS is logged; lock, sign-off and release still succeed.
 - **Payment is simulated**: no card data is collected. `csrf=False` on the pay route because the patient has no Odoo session; the URL token is the credential.
 - **Release is not gated on payment**; the exit pass needs both payment and release.
+
+---
+# Phase 13 - Past medical & surgical history in the AI draft
+
+| Part | What was built |
+|---|---|
+| Odoo | `clearpath.medical.history` (condition, type medical/surgical, year, status active/resolved), `patient.history_ids`, `discharge.patient_history_ids` (related, read-only) and `patient_history_html` (pills for the banner). Access: Doctor and Coordinator full CRUD, all other roles read. Demo PT-402: Type 2 Diabetes (2015, active), Open Cholecystectomy (2018, resolved). |
+| Views | "Past Medical & Surgical History" tab on the patient form; "Past history" pills in the discharge banner. |
+| Sidecar | `HistoryItem` schema, `DraftRequest.past_medical_history`; the pruner maps raw Odoo rows (`orm_history`) into `HistoryItem`s; the system prompt requires Past Medical / Surgical History sections and a plan adapted to active chronic conditions (blood-glucose monitoring for diabetes); the offline mock does the same with a small condition -> advice table (diabetes, hypertension, asthma/COPD, kidney, heart). |
+
+Decisions: the banner uses a computed HTML field instead of `many2many_tags` (that widget does not support a One2many); `HistoryItem` also carries an optional `diagnosis_date` so the summary can say "(2015, active)"; the demo patient is named Arabith, not John Doe; history edits after a lock do not bump the revision (they are not part of the signed clinical text).
+
+# Phase 14 - Role-tailored kanban dashboard
+
+- `clearpath.discharge` opens on a **kanban** (`kanban,list,form`) grouped by `state`: Draft, Locked / Verifying, Flagged, Cleared, Released (every column shows, even when empty, via `group_expand`). Cards cannot be dragged or quick-created: a card only moves through the sign-offs.
+- Card: patient, bed, revision, department flag tags (red = unresolved, amber = ready, green = approved, grey = stale), and conditional **Review Meds / Review Billing / Review Claim** buttons that open the Phase 6 wizards as pop-ups, without opening the form.
+- **Visibility by role** (`groups` on buttons, fields, tags, filters, menus; Administrators always included): Pharmacist -> Pharmacy only; Billing Officer -> Billing and supply logs; Hospital Admin / Insurance -> Insurance only; Doctor and Coordinator -> all three (read side: they fix the plan and release); Nurse -> none. Alerts, the pop-up and the form's top strip are filtered by the same rule on the server (`_can_see_dept`).
+- Extra: **Pharmacy / Billing / Insurance Queue** menus (role-only) open the same kanban pre-filtered to the cards waiting for that department.
+- Note: one department's approval changes its tags and removes the card from that department's queue; the card changes column only when all three have approved (the 3-way gate).

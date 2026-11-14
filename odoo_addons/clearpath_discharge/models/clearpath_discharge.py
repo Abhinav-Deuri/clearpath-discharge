@@ -41,6 +41,14 @@ GROUP_COORDINATOR = 'clearpath_discharge.group_clearpath_coordinator'
 GROUP_NURSE = 'clearpath_discharge.group_clearpath_nurse'
 GROUP_ADMIN = 'clearpath_discharge.group_clearpath_admin'
 
+# Who may see each department's flags, alerts and queue (Administrators always can).
+# Doctor and Coordinator work across departments; Nurse sees none; each department sees only its own.
+DEPT_ROLE_GROUPS = {
+    'pharmacy': (GROUP_PHARMACIST, GROUP_DOCTOR, GROUP_COORDINATOR),
+    'billing': (GROUP_BILLING, GROUP_DOCTOR, GROUP_COORDINATOR),
+    'insurance': (GROUP_ADMIN, GROUP_DOCTOR, GROUP_COORDINATOR),
+}
+
 
 def md_to_html(text):
     """Tiny Markdown -> HTML (headings, bold, bullets, pipe tables). markdown2 is not in the image."""
@@ -93,6 +101,7 @@ _ROW_RE = re.compile(r'^(?:[-*\u2022]\s+)?\*\*(.+?)\*\*\s*:?\s*(.*)$')
 _SUB_BULLET_RE = re.compile(r'^\s*[-*\u2022]\s+(?!\*\*)(.*)$')
 _HEADING_RE = re.compile(r'^#{1,6}\s+(.*)$')
 _SUMMARY_ICONS = (
+    ('surgical', 'content_cut'), ('medical history', 'stethoscope'),
     ('patient', 'person'), ('procedure', 'content_cut'), ('condition', 'content_cut'),
     ('course', 'favorite'), ('incision', 'medical_services'), ('plan', 'home'),
     ('medication', 'science'), ('allerg', 'error'), ('follow', 'history'),
@@ -202,9 +211,10 @@ class ClearpathDischarge(models.Model):
     #   cleared   : pharmacy AND billing approved the SAME revision (HITL gate #2 open)
     #   released  : coordinator released the final locked packet
     state = fields.Selection(
-        [('draft', 'Draft'), ('locked', 'Locked'), ('verifying', 'Verifying'),
+        [('draft', 'Draft'), ('locked', 'Locked'), ('verifying', 'Locked / Verifying'),
          ('flagged', 'Flagged'), ('cleared', 'Cleared'), ('released', 'Released')],
         default='draft', required=True, tracking=True, copy=False,
+        group_expand='_read_group_expand_state',  # kanban shows every column, even empty ones
     )
 
     revision_id = fields.Integer(string="Revision", default=1, readonly=True, copy=False)
@@ -290,6 +300,10 @@ class ClearpathDischarge(models.Model):
     patient_paid_on = fields.Datetime(string="Co-Pay Paid On", readonly=True, copy=False)
     last_sms_status = fields.Char(string="Last SMS Notification", readonly=True, copy=False)
     copay_sms_sent = fields.Boolean(readonly=True, copy=False)
+
+    # Phase 13: past medical / surgical history (read from the patient, fed to the AI draft)
+    patient_history_ids = fields.One2many(related='patient_id.history_ids', readonly=True)
+    patient_history_html = fields.Html(compute='_compute_patient_history_html', sanitize=False)
     top_alert_kind = fields.Selection(
         [('pharmacy', 'Pharmacy'), ('billing', 'Billing'), ('insurance', 'Insurance')],
         compute='_compute_top_alert')
@@ -350,46 +364,80 @@ class ClearpathDischarge(models.Model):
                 text = "On Hold"
             rec.insurance_button_text = text
 
+    @api.model
+    def _read_group_expand_state(self, groups, domain):
+        """Kanban: always show the whole pipeline, left to right (a transient 'locked' card still shows)."""
+        order = ['draft', 'verifying', 'flagged', 'cleared', 'released']
+        return order + [g for g in groups if g not in order]
+
+    def _can_see_dept(self, dept):
+        """Role-tailored UI: may the current user see this department's flags and alerts?"""
+        user = self.env.user
+        if self.env.is_superuser() or user._is_admin():
+            return True
+        return any(user.has_group(g) for g in DEPT_ROLE_GROUPS[dept])
+
+    @api.depends('patient_id.history_ids.condition_name', 'patient_id.history_ids.history_type',
+                 'patient_id.history_ids.status', 'patient_id.history_ids.diagnosis_date')
+    def _compute_patient_history_html(self):
+        for rec in self:
+            pills = []
+            for h in rec.patient_id.history_ids:
+                label = h.condition_name + (" (%s)" % h.diagnosis_date if h.diagnosis_date else "")
+                pills.append(Markup('<span class="o_cp_hist_pill o_cp_hist_%s o_cp_hist_%s" title="%s, %s">%s</span>')
+                             % (h.history_type, h.status, dict(h._fields['history_type'].selection)[h.history_type],
+                                dict(h._fields['status'].selection)[h.status], label))
+            rec.patient_history_html = Markup('').join(pills) if pills else False
+
+    def _history_payload(self):
+        return [{'condition_name': h.condition_name, 'history_type': h.history_type, 'status': h.status,
+                 'diagnosis_date': h.diagnosis_date or ''} for h in self.patient_id.history_ids]
+
     def _alert_items(self):
-        """What needs attention on this revision. Shown in the Review Alerts pop-up, not inline."""
+        """What needs attention on this revision, limited to what the current user's role may see.
+        Shown in the Review Alerts pop-up, not inline."""
         self.ensure_one()
+        see = {dept: self._can_see_dept(dept) for dept in DEPT_ROLE_GROUPS}
+        see_all = all(see.values())
         items = []
-        if self.pharmacy_status == 'flagged':
+        if see['pharmacy'] and self.pharmacy_status == 'flagged':
             items.append(('danger', ('warning', 'cp-pulse'), "Pharmacy safety conflict",
                           "%s Open the Pharmacy button for details. Change the medication to create a "
                           "new revision, then re-run checks." % (self.pharmacy_summary or "")))
-        if self.billing_status == 'flagged':
+        if see['billing'] and self.billing_status == 'flagged':
             items.append(('warning', ('error', 'cp-shake'), "Surgical billing discrepancy",
                           "%s Open the Billing button, correct the billed quantities, then sign off."
                           % (self.billing_summary or "")))
-        if self.insurance_status == 'flagged':
+        if see['insurance'] and self.insurance_status == 'flagged':
             items.append(('warning', ('pause_circle', 'cp-beat'), "TPA insurance claim on hold",
                           "Open the Insurance button. The claim is released for admin sign-off only after "
                           "every discrepancy is reconciled."))
-        if 'stale' in (self.pharmacy_status, self.billing_status, self.insurance_status):
+        if any(see[d] and getattr(self, '%s_status' % d) == 'stale' for d in see):
             items.append(('secondary', ('refresh', ''), "Stale-Write Guard",
                           "The record was edited after locking. The previous checks and sign-offs are "
                           "invalid. Lock this revision again to re-verify."))
-        if self.state == 'cleared' and not self.coordinator_gate_locked:
+        if see_all and self.state == 'cleared' and not self.coordinator_gate_locked:
             items.append(('success', ('lock_open', 'cp-beat'), "Release gate open",
                           "Pharmacy, Billing and Insurance all approved this revision."))
-        if self.token_savings_summary:
+        if see_all and self.token_savings_summary:
             items.append(('info', ('flash_on', ''), "Token savings before AI call", self.token_savings_summary))
         return items
 
+    @api.depends_context('uid')
     @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
                  'coordinator_gate_locked', 'token_savings_summary')
     def _compute_alert_count(self):
         for rec in self:
             rec.alert_count = len(rec._alert_items())
 
+    @api.depends_context('uid')
     @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
                  'medication_line_ids.is_flagged', 'medication_line_ids.conflict_reason',
                  'supply_line_ids.discrepancy_qty', 'patient_id.allergy_ids.allergen')
     def _compute_top_alert(self):
         for rec in self:
             kind, title = False, False
-            if rec.pharmacy_status == 'flagged':
+            if rec.pharmacy_status == 'flagged' and rec._can_see_dept('pharmacy'):
                 reasons = " ".join(rec.medication_line_ids.filtered('is_flagged').mapped('conflict_reason')
                                    ).lower()
                 allergens = rec.patient_id.allergy_ids.mapped('allergen')
@@ -397,10 +445,10 @@ class ClearpathDischarge(models.Model):
                     a.allergen for a in rec.patient_id.allergy_ids if a.criticality == 'high'][:1]
                 kind = 'pharmacy'
                 title = "%s Allergy Conflict" % (", ".join(hit) if hit else "Drug")
-            elif rec.billing_status == 'flagged':
+            elif rec.billing_status == 'flagged' and rec._can_see_dept('billing'):
                 n = len(rec.supply_line_ids.filtered(lambda s: s.discrepancy_qty > 0))
                 kind, title = 'billing', "%d unbilled surgical item%s" % (n, '' if n == 1 else 's')
-            elif rec.insurance_status == 'flagged':
+            elif rec.insurance_status == 'flagged' and rec._can_see_dept('insurance'):
                 kind, title = 'insurance', "TPA insurance claim on hold"
             rec.top_alert_kind, rec.top_alert_title = kind, title
 
@@ -723,6 +771,8 @@ class ClearpathDischarge(models.Model):
             'orm_medication_lines': self.medication_line_ids.read(),
             'orm_supply_lines': self.supply_line_ids.read(),
             'orm_allergies': self.patient_id.allergy_ids.read(),
+            'past_medical_history': self._history_payload(),
+            'orm_history': self.patient_id.history_ids.read(),
         }
         payload = json.loads(json.dumps(payload, default=str))
         data = self._post_sidecar('/api/v1/draft', payload, timeout=60)
@@ -870,6 +920,7 @@ class ClearpathDischarge(models.Model):
             'medications': self._medications_payload(),
             'allergies': self._allergies_payload(),
             'supplies': self._supplies_payload(),
+            'past_medical_history': self._history_payload(),
         }, timeout=120)
         stats = data['token_stats']
         self.write({

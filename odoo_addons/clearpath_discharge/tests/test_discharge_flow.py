@@ -1,8 +1,9 @@
 import base64
 from unittest.mock import patch
 
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests.common import HttpCase, TransactionCase, tagged
+from odoo.tools import mute_logger
 
 MODEL_REQUESTS = 'odoo.addons.clearpath_discharge.models.clearpath_discharge.requests'
 WIZARDS = {
@@ -783,3 +784,267 @@ class TestPatientTrackerPage(HttpCase):
         self.assertIn('Cleared to Go Home', page)
         self.assertIn('/report/barcode/', page)
         self.assertEqual(self.url_open('/discharge/track/%s/pay' % ('y' * 22), data={'x': '1'}).status_code, 404)
+
+
+@tagged('post_install', '-at_install')
+class TestHistoryAndKanban(TransactionCase):
+    """Phase 13 (past medical / surgical history) and Phase 14 (role-tailored kanban dashboard)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        patcher = patch(MODEL_REQUESTS)
+        cls.requests = patcher.start()
+        cls.addClassCleanup(patcher.stop)
+        cls.requests.post.side_effect = fake_post
+        cls.requests.RequestException = Exception
+
+        cls.patient = cls.env['clearpath.patient'].create({
+            'name': 'History Patient', 'patient_code': 'PT-H1', 'bed_number': '7',
+            'insurance_provider': 'Test TPA', 'policy_number': 'POL-H1',
+            'allergy_ids': [(0, 0, {'allergen': 'Penicillin', 'reaction': 'Anaphylaxis', 'criticality': 'high'})],
+            'history_ids': [
+                (0, 0, {'condition_name': 'Type 2 Diabetes', 'history_type': 'medical',
+                        'diagnosis_date': '2015', 'status': 'active'}),
+                (0, 0, {'condition_name': 'Open Cholecystectomy', 'history_type': 'surgical',
+                        'diagnosis_date': '2018', 'status': 'resolved'}),
+            ],
+        })
+        cls.discharge = cls.env['clearpath.discharge'].create({
+            'patient_id': cls.patient.id,
+            'raw_handoff_note': 'POD1 appendectomy. Start Amoxicillin 500mg TID.',
+            'medication_line_ids': [(0, 0, {'drug_name': 'Amoxicillin', 'dosage': '500mg', 'frequency': 'TID'})],
+            'supply_line_ids': [
+                (0, 0, {'item_name': 'Gauze', 'surgical_qty_used': 4, 'billed_qty': 2}),
+                (0, 0, {'item_name': 'Stapler', 'surgical_qty_used': 1, 'billed_qty': 0}),
+            ],
+        })
+
+        def user(login, group):
+            return cls.env['res.users'].with_context(no_reset_password=True).create({
+                'name': login, 'login': login,
+                'group_ids': [(6, 0, [cls.env.ref('base.group_user').id, cls.env.ref(group).id])],
+            })
+        for key in ('doctor', 'pharmacist', 'billing', 'coordinator', 'nurse', 'admin'):
+            setattr(cls, 'u_' + key, user('h_' + key, 'clearpath_discharge.group_clearpath_' + key))
+
+    def _locked(self):
+        d = self.discharge
+        d.action_generate_ai_draft()
+        d.action_lock_revision_and_verify()
+        return d
+
+    def _arch(self, user, view_xmlid, view_type):
+        env = self.env(user=user) if user else self.env
+        return env['clearpath.discharge'].get_view(self.env.ref(view_xmlid).id, view_type)['arch']
+
+    FORM = 'clearpath_discharge.clearpath_discharge_view_form'
+    KANBAN = 'clearpath_discharge.clearpath_discharge_view_kanban'
+
+    # ---------------------------------------------------------------- Phase 13
+    def test_01_history_model_relations_and_pills(self):
+        self.assertEqual(self.patient.history_ids.mapped('condition_name'),
+                         ['Type 2 Diabetes', 'Open Cholecystectomy'])
+        self.assertEqual(self.discharge.patient_history_ids, self.patient.history_ids)
+        hist = self.patient.history_ids
+        self.assertEqual(hist.mapped('history_type'), ['medical', 'surgical'])
+        self.assertEqual(hist.mapped('status'), ['active', 'resolved'])
+        html = str(self.discharge.patient_history_html)
+        self.assertIn('Type 2 Diabetes (2015)', html)
+        self.assertIn('o_cp_hist_resolved', html)
+        default = self.env['clearpath.medical.history'].create({'patient_id': self.patient.id, 'condition_name': 'X'})
+        self.assertEqual((default.history_type, default.status), ('medical', 'active'))
+        with self.assertRaises(Exception), mute_logger('odoo.sql_db'):
+            self.env['clearpath.medical.history'].create({'patient_id': self.patient.id})  # name is required
+
+    def test_02_history_access_rights(self):
+        History = self.env['clearpath.medical.history']
+        row = History.create({'patient_id': self.patient.id, 'condition_name': 'Asthma'})
+        self.assertEqual(History.with_user(self.u_doctor).search_count([('id', '=', row.id)]), 1)
+        History.with_user(self.u_doctor).create({'patient_id': self.patient.id, 'condition_name': 'COPD'})
+        row.with_user(self.u_coordinator).write({'status': 'resolved'})
+        for key in ('pharmacist', 'billing', 'nurse', 'admin'):
+            user = getattr(self, 'u_' + key)
+            self.assertEqual(History.with_user(user).search_count([('id', '=', row.id)]), 1, key)  # can read
+            with self.assertRaises(AccessError, msg=key):
+                row.with_user(user).write({'status': 'active'})
+            with self.assertRaises(AccessError, msg=key):
+                History.with_user(user).create({'patient_id': self.patient.id, 'condition_name': 'No'})
+
+    def test_03_draft_request_carries_the_history(self):
+        self.requests.post.reset_mock()
+        self.discharge.action_generate_ai_draft()
+        call = [c for c in self.requests.post.call_args_list if c.args[0].endswith('/api/v1/draft')][-1]
+        sent = call.kwargs['json']
+        self.assertEqual([h['condition_name'] for h in sent['past_medical_history']],
+                         ['Type 2 Diabetes', 'Open Cholecystectomy'])
+        self.assertEqual(sent['past_medical_history'][0],
+                         {'condition_name': 'Type 2 Diabetes', 'history_type': 'medical', 'status': 'active',
+                          'diagnosis_date': '2015'})
+        self.assertEqual(len(sent['orm_history']), 2)  # raw rows for the token-savings measurement
+
+    def test_04_patient_form_has_history_tab_and_banner_pills(self):
+        patient_arch = self.env['clearpath.patient'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_patient_view_form').id, 'form')['arch']
+        self.assertIn('history_ids', patient_arch)
+        self.assertIn('Past Medical &amp; Surgical History', patient_arch)
+        form = self._arch(None, self.FORM, 'form')
+        self.assertIn('patient_history_html', form)
+        self.assertIn('Past history', form)
+
+    # ---------------------------------------------------------------- Phase 14: role-tailored UI
+    def test_10_alerts_and_top_alert_follow_the_role(self):
+        d = self._locked()
+        self.assertEqual((d.pharmacy_status, d.billing_status, d.insurance_status), ('flagged',) * 3)
+
+        def titles(user):
+            return [i[2] for i in d.with_user(user)._alert_items()]
+        self.assertEqual(titles(self.u_pharmacist), ["Pharmacy safety conflict"])
+        self.assertEqual(titles(self.u_billing), ["Surgical billing discrepancy"])
+        self.assertEqual(titles(self.u_admin), ["TPA insurance claim on hold"])
+        self.assertEqual(titles(self.u_nurse), [])
+        for user in (self.u_doctor, self.u_coordinator):
+            self.assertEqual(len(titles(user)), 4, user.login)  # 3 flags + token savings
+        self.assertEqual(len(d._alert_items()), 4)  # Administrator sees everything
+        self.assertEqual(d.with_user(self.u_pharmacist).alert_count, 1)
+        self.assertEqual(d.with_user(self.u_nurse).alert_count, 0)
+        self.assertEqual(d.with_user(self.u_billing).top_alert_kind, 'billing')
+        self.assertEqual(d.with_user(self.u_pharmacist).top_alert_kind, 'pharmacy')
+        self.assertFalse(d.with_user(self.u_nurse).top_alert_kind)
+
+    def test_11_alerts_popup_text_is_role_filtered(self):
+        d = self._locked()
+        wiz = self.env['clearpath.alerts.wizard'].with_user(self.u_billing).create({'discharge_id': d.id})
+        self.assertIn('billing discrepancy', wiz.alerts_html)
+        self.assertNotIn('Pharmacy safety conflict', wiz.alerts_html)
+        self.assertNotIn('TPA insurance claim', wiz.alerts_html)
+
+    def test_12_form_smart_buttons_by_role(self):
+        wizards = {'pharmacy': 'action_open_pharmacy_wizard', 'billing': 'action_open_billing_wizard',
+                   'insurance': 'action_open_insurance_wizard'}
+        expected = {'pharmacist': {'pharmacy'}, 'billing': {'billing'}, 'admin': {'insurance'},
+                    'doctor': set(wizards), 'coordinator': set(wizards), 'nurse': set()}
+        for key, depts in expected.items():
+            arch = self._arch(getattr(self, 'u_' + key), self.FORM, 'form')
+            for dept, method in wizards.items():
+                self.assertEqual(method in arch, dept in depts, '%s sees %s button' % (key, dept))
+        admin = self._arch(None, self.FORM, 'form')  # Administrator: everything on one screen
+        for method in wizards.values():
+            self.assertIn(method, admin)
+        self.assertIn('action_view_invoice', admin)
+        self.assertNotIn('action_view_invoice', self._arch(self.u_pharmacist, self.FORM, 'form'))
+
+    def test_13_form_fields_by_role(self):
+        pharm = self._arch(self.u_pharmacist, self.FORM, 'form')
+        self.assertIn('medication_line_ids', pharm)
+        self.assertNotIn('supply_line_ids', pharm)  # supply logs are Billing's
+        bill = self._arch(self.u_billing, self.FORM, 'form')
+        self.assertIn('supply_line_ids', bill)
+        self.assertNotIn('medication_line_ids', bill)
+        self.assertNotIn('conflict_reason', bill)
+        self.assertIn('conflict_reason', pharm)
+        self.assertNotIn('Allergy Hold', bill)
+
+    def test_14_wizard_buttons_include_administrators(self):
+        views = {'clearpath_discharge.clearpath_pharmacy_wizard_view_form': 'group_clearpath_pharmacist',
+                 'clearpath_discharge.clearpath_billing_wizard_view_form': 'group_clearpath_billing',
+                 'clearpath_discharge.clearpath_insurance_wizard_view_form': 'group_clearpath_admin'}
+        for xmlid, group in views.items():
+            view = self.env.ref(xmlid, raise_if_not_found=False)
+            if not view:
+                continue
+            self.assertIn('base.group_system', view.arch_db, xmlid)
+            self.assertIn(group, view.arch_db, xmlid)
+
+    # ---------------------------------------------------------------- Phase 14: kanban
+    def test_20_window_action_opens_kanban_first(self):
+        action = self.env.ref('clearpath_discharge.clearpath_discharge_action')
+        self.assertEqual(action.view_mode, 'kanban,list,form')
+        self.assertEqual(self.env['clearpath.discharge'].get_views([(False, 'kanban')])['views']['kanban']['id'],
+                         self.env.ref(self.KANBAN).id)
+        for dept in ('pharmacy', 'billing', 'insurance'):
+            queue = self.env.ref('clearpath_discharge.clearpath_discharge_action_%s_queue' % dept)
+            self.assertTrue(queue.view_mode.startswith('kanban'))
+            self.assertIn('search_default_queue_%s' % dept, queue.context)
+
+    def test_21_kanban_arch_is_safe_and_grouped_by_state(self):
+        arch = self._arch(None, self.KANBAN, 'kanban')
+        self.assertIn('default_group_by="state"', arch)
+        self.assertIn('records_draggable="false"', arch)  # moving a card must not bypass a sign-off
+        self.assertIn('quick_create="false"', arch)
+        for needle in ('patient_id', 'bed_number', 'revision_id', 'Review Meds', 'Review Billing', 'Review Claim'):
+            self.assertIn(needle, arch)
+
+    def test_22_kanban_cards_show_only_the_users_department(self):
+        def tags(user):
+            arch = self._arch(user, self.KANBAN, 'kanban')
+            return {'pharmacy': 'Pharmacy' in arch, 'billing': 'Billing' in arch, 'insurance': 'Insurance' in arch}
+
+        def buttons(user):
+            arch = self._arch(user, self.KANBAN, 'kanban')
+            return {'Review Meds' in arch, 'Review Billing' in arch, 'Review Claim' in arch}
+        self.assertEqual(tags(self.u_pharmacist), {'pharmacy': True, 'billing': False, 'insurance': False})
+        self.assertEqual(tags(self.u_billing), {'pharmacy': False, 'billing': True, 'insurance': False})
+        self.assertEqual(tags(self.u_admin), {'pharmacy': False, 'billing': False, 'insurance': True})
+        self.assertEqual(tags(self.u_nurse), {'pharmacy': False, 'billing': False, 'insurance': False})
+        self.assertEqual(tags(self.u_doctor), {'pharmacy': True, 'billing': True, 'insurance': True})
+        self.assertEqual(tags(None), {'pharmacy': True, 'billing': True, 'insurance': True})
+        arch = lambda user: self._arch(user, self.KANBAN, 'kanban')  # noqa: E731
+        self.assertIn('Review Meds', arch(self.u_pharmacist))
+        self.assertNotIn('Review Billing', arch(self.u_pharmacist))
+        self.assertNotIn('Review Claim', arch(self.u_pharmacist))
+        self.assertIn('Review Billing', arch(self.u_billing))
+        self.assertNotIn('Review Meds', arch(self.u_billing))
+        self.assertIn('Review Claim', arch(self.u_admin))
+        self.assertNotIn('Review Meds', arch(self.u_admin))
+        for text in ('Review Meds', 'Review Billing', 'Review Claim'):
+            self.assertNotIn(text, arch(self.u_doctor))  # doctors fix the plan, they do not sign off departments
+            self.assertNotIn(text, arch(self.u_nurse))
+            self.assertIn(text, arch(None))  # Administrator can demo every action
+
+    def test_23_kanban_columns_cover_the_whole_pipeline(self):
+        # web_read_group + read_group_expand is what the kanban view calls; it applies the field's group_expand
+        groups = self.env['clearpath.discharge'].with_context(read_group_expand=True).web_read_group(
+            [], ['state'], ['__count'])['groups']
+        states = [g['state'][0] if isinstance(g['state'], (list, tuple)) else g['state'] for g in groups]
+        for state in ('draft', 'verifying', 'flagged', 'cleared', 'released'):
+            self.assertIn(state, states)
+        self.assertLess(states.index('draft'), states.index('flagged'))
+        self.assertLess(states.index('flagged'), states.index('released'))
+        label = dict(self.env['clearpath.discharge']._fields['state'].selection)['verifying']
+        self.assertEqual(label, 'Locked / Verifying')
+
+    def test_24_queue_filters_move_cards_out_after_sign_off(self):
+        from lxml import etree
+        search = etree.fromstring(self._arch(None, 'clearpath_discharge.clearpath_discharge_view_search', 'search'))
+        domains = {f.get('name'): f.get('domain') for f in search.iter('filter') if f.get('name', '').startswith('queue_')}
+        self.assertEqual(set(domains), {'queue_pharmacy', 'queue_billing', 'queue_insurance'})
+        d = self._locked()
+        Discharge = self.env['clearpath.discharge']
+
+        def queue(name):
+            return d in Discharge.search(eval(domains[name]))  # noqa: S307  (our own view domain)
+        self.assertTrue(queue('queue_pharmacy') and queue('queue_billing') and queue('queue_insurance'))
+        d.with_context(clearpath_skip_guard=True).write({'pharmacy_status': 'approved'})
+        self.assertFalse(queue('queue_pharmacy'))  # left the pharmacist's queue...
+        self.assertTrue(queue('queue_billing'))  # ...but still waits for the others
+        d.with_context(clearpath_skip_guard=True).write({'state': 'cleared'})
+        self.assertFalse(queue('queue_billing'))
+
+    def test_25_kanban_card_button_opens_the_wizard_popup(self):
+        d = self._locked()
+        for method, model in (('action_open_pharmacy_wizard', 'clearpath.pharmacy.approval.wizard'),
+                              ('action_open_billing_wizard', 'clearpath.billing.approval.wizard'),
+                              ('action_open_insurance_wizard', 'clearpath.insurance.approval.wizard')):
+            action = getattr(d, method)()
+            self.assertEqual((action['type'], action['target'], action['res_model']),
+                             ('ir.actions.act_window', 'new', model))
+
+    def test_26_role_menus(self):
+        expected = {'pharmacy': 'group_clearpath_pharmacist', 'billing': 'group_clearpath_billing',
+                    'insurance': 'group_clearpath_admin'}
+        for dept, group in expected.items():
+            menu = self.env.ref('clearpath_discharge.clearpath_menu_%s_queue' % dept)
+            self.assertIn(self.env.ref('clearpath_discharge.' + group), menu.group_ids)
+            self.assertIn(self.env.ref('base.group_system'), menu.group_ids)
+        self.assertFalse(self.env.ref('clearpath_discharge.clearpath_menu_discharges').group_ids)  # open to all roles

@@ -17,9 +17,18 @@ _SYSTEM_PROMPT = (
     "Never invent vitals, dates, doses, test results, or instructions that are not in the data. "
     "Omit any item with nothing documented; do not write placeholders. Format strictly as: a first line "
     "**Discharge Summary**, then one bullet per item written as '- **Label**: value'. Use these labels "
-    "when documented: Patient, Procedure, Hospital Course, Incisions, Plan, Medications, Allergies, "
-    "Items for clinician review, Follow-up; add other labels only if this condition needs them. Keep it "
-    "under 250 words. No tables, no horizontal rules (---), no nested bullets, no empty bullets. If a medication seems to conflict with a documented "
+    "when documented: Patient, Procedure, Hospital Course, Incisions, Past Medical History, Past Surgical "
+    "History, Plan, Medications, Allergies, Items for clinician review, Follow-up; add other labels only "
+    "if this condition needs them. Keep it under 300 words. "
+    "You will receive the patient's Past Medical and Surgical History (past_medical_history). You must "
+    "include a 'Past Medical History' section (chronic conditions) and a 'Past Surgical History' section "
+    "in the summary, listing each condition with its year and whether it is active or resolved. "
+    "Furthermore, you MUST adapt the 'Plan' (discharge plan) and 'Follow-up' instructions to the ACTIVE "
+    "chronic conditions: for example, if the patient has Type 2 Diabetes, explicitly instruct them to "
+    "monitor blood glucose closely because of post-operative stress, and to report persistently high or "
+    "low readings; if they have hypertension, advise regular blood pressure checks. Keep such advice to "
+    "standard post-operative monitoring and warning signs: do not invent medication changes or doses. "
+    "No tables, no horizontal rules (---), no nested bullets, no empty bullets. If a medication seems to conflict with a documented "
     "allergy, list it under 'Items for clinician review' and do NOT resolve, approve or override it; "
     "a human will decide. Also give 3 to 5 short review questions specific to this case. "
     "Also list proposed_medications: only medications explicitly stated in the handoff note, "
@@ -49,6 +58,38 @@ def extract_medications(note: str) -> list[dict]:
     return out
 
 
+# Deterministic condition -> post-operative advice, so the offline demo adapts the plan like the live model.
+_CONDITION_ADVICE = (
+    (("diabet",), "monitor blood glucose closely at home (post-operative stress can raise blood sugar), "
+                  "keep a log, and report persistently high or low readings"),
+    (("hypertens", "high blood pressure"), "check blood pressure regularly and report persistently high readings"),
+    (("asthma", "copd"), "keep the reliever inhaler to hand and report new breathlessness or wheeze"),
+    (("kidney", "renal", "ckd"), "stay hydrated as advised and report reduced urine output"),
+    (("heart failure", "coronary", "cardiac", "atrial fib", "ischaemic", "ischemic"),
+     "report chest pain, palpitations, breathlessness or leg swelling promptly"),
+)
+
+
+def _history_text(items: list[dict]) -> str:
+    return "; ".join(
+        f"{h.get('condition_name', '?')} ({', '.join(x for x in (h.get('diagnosis_date', ''), h.get('status', '')) if x)})"
+        for h in items)
+
+
+def _active_condition_advice(history: list[dict]) -> list[tuple[str, str]]:
+    """[(condition, advice)] for ACTIVE medical conditions we have a standard post-operative instruction for."""
+    out = []
+    for h in history:
+        if h.get("history_type", "medical") != "medical" or h.get("status", "active") != "active":
+            continue
+        name = str(h.get("condition_name", ""))
+        for keys, advice in _CONDITION_ADVICE:
+            if any(k in name.lower() for k in keys):
+                out.append((name, advice))
+                break
+    return out
+
+
 def _mock_draft(context: dict) -> tuple[str, list[str], list[dict]]:
     note = context.get("raw_handoff_note", "")
     meds = context.get("medications", [])
@@ -60,20 +101,39 @@ def _mock_draft(context: dict) -> tuple[str, list[str], list[dict]]:
         for a in context.get("allergies", [])
     ) or "None documented"
     first = note.strip().split(".")[0][:120] if note.strip() else "See handoff note"
-    summary = (
-        "**Discharge Summary**\n"
-        f"- **Patient**: {context.get('patient_code', 'PT-???')}, Bed {context.get('bed_number', '?')}\n"
-        f"- **Procedure**: {first}\n"
-        f"- **Hospital Course**: {note.strip()[:400]}\n"
-        f"- **Medications**: {med_text}\n"
-        f"- **Allergies**: {allergies}\n"
-        "- **Follow-up**: per clinician; see handoff note."
-    )
+    history = context.get("past_medical_history", [])
+    pmh = [h for h in history if h.get("history_type", "medical") == "medical"]
+    psh = [h for h in history if h.get("history_type") == "surgical"]
+    advice = _active_condition_advice(history)
+    lines = [
+        "**Discharge Summary**",
+        f"- **Patient**: {context.get('patient_code', 'PT-???')}, Bed {context.get('bed_number', '?')}",
+        f"- **Procedure**: {first}",
+        f"- **Hospital Course**: {note.strip()[:400]}",
+    ]
+    if pmh:
+        lines.append(f"- **Past Medical History**: {_history_text(pmh)}")
+    if psh:
+        lines.append(f"- **Past Surgical History**: {_history_text(psh)}")
+    if advice:
+        lines.append("- **Plan**: " + "; ".join(f"{name}: {text}" for name, text in advice) + ".")
+    lines += [
+        f"- **Medications**: {med_text}",
+        f"- **Allergies**: {allergies}",
+    ]
+    follow = "per clinician; see handoff note."
+    if advice:
+        follow += " Review " + " and ".join(name for name, _ in advice) + " control at the follow-up visit."
+    lines.append(f"- **Follow-up**: {follow}")
+    summary = "\n".join(lines)
     prompts = [
         "Confirm each proposed discharge medication is compatible with the documented allergies.",
         "Confirm all surgical supplies used are reflected in the billing record.",
         "Confirm follow-up timing and return precautions are appropriate for this patient.",
     ]
+    if advice:
+        prompts.append("Confirm the discharge plan accounts for the patient's active conditions: "
+                       + ", ".join(name for name, _ in advice) + ".")
     return summary, prompts, extract_medications(note)
 
 

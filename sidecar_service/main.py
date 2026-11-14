@@ -76,7 +76,7 @@ async def transcribe_and_draft(req: VoiceDraftRequest) -> VoiceDraftResponse:
     draft_req = DraftRequest(
         discharge_id=req.discharge_id, patient_code=req.patient_code, patient_name=req.patient_name,
         bed_number=req.bed_number, raw_handoff_note=text, medications=req.medications,
-        allergies=req.allergies, supplies=req.supplies,
+        allergies=req.allergies, supplies=req.supplies, past_medical_history=req.past_medical_history,
     )
     pruned, stats = prune_and_anonymize(draft_req)
     draft_resp = await generate_discharge_summary(pruned, req.discharge_id, stats)

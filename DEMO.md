@@ -66,3 +66,10 @@ SMS runs in mock mode by default (`USE_MOCK_SMS=true`): nothing is sent to a pho
 `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` and `USE_MOCK_SMS=false` in `.env`, then
 `docker compose up -d sidecar_service`. The link in the SMS uses `PUBLIC_ODOO_BASE_URL`; `localhost` only
 opens on this machine, so use the machine's LAN address or a tunnel URL for a real phone.
+
+## Phase 13/14: history + role dashboard
+
+1. Open **ClearPath Discharge**: the kanban dashboard is the landing page. Cards are grouped Draft, Locked / Verifying, Flagged, Cleared, Released.
+2. On PT-402 the banner shows the **Past history** pills (Type 2 Diabetes, Open Cholecystectomy). Click **Generate AI Draft**: the summary lists both histories and the plan tells the patient to monitor blood glucose closely.
+3. As Administrator every card shows its flags and the **Review Meds / Review Billing / Review Claim** buttons. Click one: the approval pop-up opens straight from the card.
+4. Log in as a user with only the Pharmacist group: only Pharmacy tags, the Pharmacy button, the **Pharmacy Queue** menu and the Review Meds button are visible. Billing and Insurance are hidden everywhere (form, alerts, kanban).

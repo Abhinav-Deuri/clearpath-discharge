@@ -83,7 +83,7 @@
                 <footer>
                     <button name="action_approve" type="object" string="Approve &amp; Resolve"
                             class="btn-primary" invisible="not can_approve"
-                            groups="clearpath_discharge.group_clearpath_pharmacist"/>
+                            groups="clearpath_discharge.group_clearpath_pharmacist,base.group_system"/>
                     <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
                     <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
                 </footer>
@@ -188,7 +188,7 @@
                 <footer>
                     <button name="action_approve" type="object" string="Approve &amp; Resolve"
                             class="btn-primary" invisible="not can_approve"
-                            groups="clearpath_discharge.group_clearpath_billing"/>
+                            groups="clearpath_discharge.group_clearpath_billing,base.group_system"/>
                     <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
                     <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
                 </footer>
@@ -281,7 +281,7 @@
                 <footer>
                     <button name="action_approve" type="object" string="Approve &amp; Resolve"
                             class="btn-primary" invisible="not can_approve"
-                            groups="clearpath_discharge.group_clearpath_admin"/>
+                            groups="clearpath_discharge.group_clearpath_admin,base.group_system"/>
                     <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
                     <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
                 </footer>
@@ -320,11 +320,11 @@
                     <field name="alerts_html" nolabel="1"/>
                 </sheet>
                 <footer>
-                    <button name="action_open_pharmacy" type="object" string="Pharmacy" icon="medical_services"
+                    <button name="action_open_pharmacy" type="object" groups="clearpath_discharge.group_clearpath_pharmacist,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" string="Pharmacy" icon="medical_services"
                             class="btn-secondary" invisible="pharmacy_status != 'flagged'"/>
-                    <button name="action_open_billing" type="object" string="Billing" icon="calculate"
+                    <button name="action_open_billing" type="object" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" string="Billing" icon="calculate"
                             class="btn-secondary" invisible="billing_status != 'flagged'"/>
-                    <button name="action_open_insurance" type="object" string="Insurance" icon="security"
+                    <button name="action_open_insurance" type="object" groups="clearpath_discharge.group_clearpath_admin,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" string="Insurance" icon="security"
                             class="btn-secondary" invisible="insurance_status != 'flagged'"/>
                     <button string="Got it" special="cancel" icon="check" class="btn-primary"/>
                 </footer>

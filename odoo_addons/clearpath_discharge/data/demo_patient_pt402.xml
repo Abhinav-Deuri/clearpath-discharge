@@ -16,6 +16,22 @@
             <field name="criticality">high</field>
         </record>
 
+        <record id="demo_history_diabetes" model="clearpath.medical.history">
+            <field name="patient_id" ref="demo_patient_pt402"/>
+            <field name="condition_name">Type 2 Diabetes</field>
+            <field name="history_type">medical</field>
+            <field name="diagnosis_date">2015</field>
+            <field name="status">active</field>
+        </record>
+
+        <record id="demo_history_cholecystectomy" model="clearpath.medical.history">
+            <field name="patient_id" ref="demo_patient_pt402"/>
+            <field name="condition_name">Open Cholecystectomy (gallbladder removal)</field>
+            <field name="history_type">surgical</field>
+            <field name="diagnosis_date">2018</field>
+            <field name="status">resolved</field>
+        </record>
+
         <record id="demo_discharge_pt402" model="clearpath.discharge">
             <field name="patient_id" ref="demo_patient_pt402"/>
         </record>

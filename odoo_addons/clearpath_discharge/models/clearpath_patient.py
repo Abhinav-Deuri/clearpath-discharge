@@ -17,6 +17,8 @@ class ClearpathPatient(models.Model):
     policy_number = fields.Char(string="Policy Number")
     allergy_ids = fields.One2many('clearpath.allergy', 'patient_id', string="Allergies")
     discharge_ids = fields.One2many('clearpath.discharge', 'patient_id', string="Discharges")
+    history_ids = fields.One2many(
+        'clearpath.medical.history', 'patient_id', string="Past Medical & Surgical History")
 
     @api.constrains('patient_code')
     def _check_patient_code_unique(self):
@@ -36,3 +38,20 @@ class ClearpathAllergy(models.Model):
         [('low', 'Low'), ('medium', 'Medium'), ('high', 'High')],
         default='high', required=True,
     )
+
+
+class ClearpathMedicalHistory(models.Model):
+    """One past condition (chronic disease) or past operation. Fed to the AI draft so the discharge plan
+    can account for it (e.g. a diabetic patient is told to watch blood sugar after surgery)."""
+    _name = 'clearpath.medical.history'
+    _description = 'Past Medical / Surgical History'
+    _rec_name = 'condition_name'
+    _order = 'history_type, id'
+
+    patient_id = fields.Many2one('clearpath.patient', required=True, ondelete='cascade', index=True)
+    condition_name = fields.Char(string="Condition / Procedure", required=True)
+    history_type = fields.Selection(
+        [('medical', 'Medical'), ('surgical', 'Surgical')], string="Type", required=True, default='medical')
+    diagnosis_date = fields.Char(string="Year / Date", help="Free text, e.g. 2018")
+    status = fields.Selection(
+        [('active', 'Active'), ('resolved', 'Resolved')], required=True, default='active')
