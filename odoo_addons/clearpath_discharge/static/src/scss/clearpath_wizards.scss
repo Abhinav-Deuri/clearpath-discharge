@@ -218,3 +218,40 @@
     width: auto !important;
     display: inline-block;
 }
+
+// ---- Clinical Trust blue ------------------------------------------------------------------------
+// Odoo's "primary" colour is purple, so Bootstrap's primary utilities (bg-primary, text-primary,
+// text-bg-primary, border-primary-subtle, btn-primary) all came out purple. Inside ClearPath screens
+// primary is re-mapped to a clinical blue, so the spec's classes render blue + white.
+.o_clearpath_discharge_form,
+.o_clearpath_wizard,
+.modal:has(.o_clearpath_wizard) {
+    --bs-primary: #1565c0;
+    --bs-primary-rgb: 21, 101, 192;
+    --bs-primary-bg-subtle: #e8f1fb;
+    --bs-primary-border-subtle: #b7d3f2;
+    --bs-primary-text-emphasis: #0d47a1;
+    --bs-link-color: #1565c0;
+    --bs-link-color-rgb: 21, 101, 192;
+    --bs-link-hover-color: #0d47a1;
+    --o-action: #1565c0;
+    --o-brand-primary: #1565c0;
+}
+
+.o_clearpath_discharge_form,
+.modal:has(.o_clearpath_wizard) {
+    .btn-primary {
+        --bs-btn-bg: #1565c0;
+        --bs-btn-border-color: #1565c0;
+        --bs-btn-hover-bg: #0d47a1;
+        --bs-btn-hover-border-color: #0d47a1;
+        --bs-btn-active-bg: #0d47a1;
+        --bs-btn-active-border-color: #0d47a1;
+        --bs-btn-disabled-bg: #1565c0;
+        --bs-btn-disabled-border-color: #1565c0;
+    }
+    // Stat-button numbers / labels: dark text instead of the purple link colour.
+    .oe_stat_button.o_cp_stat .o_stat_value { color: var(--bs-emphasis-color); }
+    .oe_stat_button.o_cp_stat .o_stat_value .text-danger { color: var(--bs-danger); }
+    .o_statusbar_status .o_arrow_button_current { background-color: #1565c0; border-color: #1565c0; }
+}
