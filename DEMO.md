@@ -48,3 +48,6 @@ The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, In
 Audio and photos are real patient data: use a provider you are cleared to send it to.
 
 **Role logins (optional):** Settings -> Users, give a user one ClearPath role. Each only sees their own buttons.
+
+**Reception flow:** Contacts -> create a Contact (name, phone, email, address). On that Contact click **Admit as Patient**, add the patient code and bed. The Patient form shows the Contact details on top and "Clinical Admission Details" below; the Contact shows a **Patient** smart button back.
+**Billing fixes keep the claim in sync:** fixing a Billed quantity (Billing pop-up or the supply list) re-runs the Insurance worker for the same revision and rebuilds the TPA claim. If the claim was already approved, that approval is withdrawn.

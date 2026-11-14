@@ -306,3 +306,9 @@ Problem: `ai_draft_summary` is stored as markdown and shown raw in a plain `Text
 - Animated cues: Allergy Hold / Cleared ribbons, animated strip, 4-state icon buttons per department; `fa-beat`, `fa-beat-fade`, `fa-shake` polyfilled in scss; reduced-motion respected.
 - AI summary renders as a card (`summary_to_html`), `---` rules stripped, sidecar prompt/mock use `- **Label**: value`.
 - Icons: Odoo 20 has no Font Awesome (it ships Material Symbols + odoo_ui_icons), so `fa fa-*` rendered blank. All icons are now `<i class="oi" data-icon="material_name"/>` (names verified against the font subset); button `icon="..."` takes the Material name; `oi-spin` for the gear; `cp-pulse` / `cp-beat` / `cp-beat-fade` / `cp-shake` are our own keyframes.
+
+### Phase 9 as built
+- `models/res_partner.py` (Contacts side): `patient_ids`, `patient_count`, `action_open_clearpath_patient`; `views/res_partner_views.xml` adds a **Patient** / **Admit as Patient** smart button on the Contact form. Patient form: Contact details on top, "Clinical Admission Details" group below.
+- Flagged smart buttons show the count next to a pulsing red warning triangle, driven by `pharmacy_conflict_count`, `unbilled_item_count`, `insurance_hold_count`; ready/approved/stale keep their icon states.
+- Decision: a billed-quantity fix does NOT bump the revision (that would wipe the pharmacy sign-off). Instead `_refresh_insurance_claim` re-runs the Insurance worker on the same revision, rebuilds the claim, and withdraws an existing insurance approval (gate re-locks). Item / used-quantity edits still bump the revision and stale all three.
+- Reset Demo now drops the invoice link (draft invoice deleted; a posted one stays in Invoicing).

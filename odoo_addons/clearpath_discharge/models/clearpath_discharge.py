@@ -451,6 +451,45 @@ class ClearpathDischarge(models.Model):
         )
         return hashlib.sha256(blob.encode()).hexdigest()
 
+    def _verify_payload(self):
+        self.ensure_one()
+        return {
+            'discharge_id': self.id,
+            'revision_id': self.revision_id,
+            'revision_hash': self.revision_hash,
+            'patient_code': self.patient_id.patient_code,
+            'medications': self._medications_payload(),
+            'allergies': self._allergies_payload(),
+            'supplies': self._supplies_payload(),
+            'push_to_odoo': False,  # Odoo applies the response itself (no self-callback)
+            'procedure_text': ' '.join(filter(None, [self.raw_handoff_note, self.ai_draft_summary])),
+            'tpa_provider': self.patient_id.insurance_provider or '',
+            'policy_number': self.patient_id.policy_number or '',
+        }
+
+    def _refresh_insurance_claim(self, reason):
+        """A billing correction changes what the TPA claim must say. Rebuild the claim for the SAME revision
+        (the Insurance worker runs again) and drop any insurance sign-off that was based on the old claim."""
+        for rec in self.filtered(lambda r: r.state in ('flagged', 'verifying', 'cleared')):
+            snapshot = rec._post_sidecar('/api/v1/verify', rec._verify_payload(), timeout=30)
+            ins = snapshot.get('insurance_output') or {}
+            ins_flag = bool(ins) and ins.get('claim_status') != 'ready_for_review'
+            codes = ' / '.join(x for x in (ins.get('icd10_code'), ins.get('cpt_code')) if x)
+            vals = {
+                'tpa_claim_document': ins.get('filled_claim_markdown') or False,
+                'icd10_cpt_codes': codes or False,
+                'insurance_hold_reasons': "\n".join("- " + h for h in ins.get('hold_reasons', [])) or False,
+                'insurance_status': 'flagged' if ins_flag else 'pending',
+            }
+            was_approved = rec.insurance_status == 'approved'
+            if was_approved:  # the approved claim no longer matches the billing: re-approval needed
+                vals.update({'insurance_approver_id': False, 'insurance_approved_on': False,
+                             'coordinator_gate_locked': True, 'state': 'flagged'})
+            rec.with_context(clearpath_skip_guard=True).write(vals)
+            rec.message_post(body="TPA claim rebuilt for Rev %d after %s.%s" % (
+                rec.revision_id, reason,
+                " The previous insurance sign-off was withdrawn." if was_approved else ""))
+
     def _sidecar_url(self):
         return self.env['ir.config_parameter'].sudo().get_str(
             'clearpath.sidecar_url', 'http://sidecar_service:8000').rstrip('/')
@@ -551,8 +590,9 @@ class ClearpathDischarge(models.Model):
         except requests.RequestException:
             raise UserError("Cannot reach the sidecar to clear its state; start it and try again.")
         ctx = self.sudo().with_context(clearpath_skip_guard=True)  # admin-only action
-        if ctx.invoice_id and ctx.invoice_id.state == 'draft':
-            ctx.invoice_id.unlink()
+        if ctx.invoice_id.state == 'draft':
+            ctx.invoice_id.unlink()  # a posted invoice stays in Invoicing; only the link is dropped
+        ctx.write({'invoice_id': False})
         ctx.medication_line_ids.unlink()
         ctx.supply_line_ids.unlink()
         ctx.env['clearpath.medication.line'].create(
@@ -670,19 +710,7 @@ class ClearpathDischarge(models.Model):
             'billing_status': 'pending',
             'coordinator_gate_locked': True,
         })
-        snapshot = self._post_sidecar('/api/v1/verify', {
-            'discharge_id': self.id,
-            'revision_id': self.revision_id,
-            'revision_hash': self.revision_hash,
-            'patient_code': self.patient_id.patient_code,
-            'medications': self._medications_payload(),
-            'allergies': self._allergies_payload(),
-            'supplies': self._supplies_payload(),
-            'push_to_odoo': False,  # Odoo applies the response itself (no self-callback)
-            'procedure_text': ' '.join(filter(None, [self.raw_handoff_note, self.ai_draft_summary])),
-            'tpa_provider': self.patient_id.insurance_provider or '',
-            'policy_number': self.patient_id.policy_number or '',
-        }, timeout=30)
+        snapshot = self._post_sidecar('/api/v1/verify', self._verify_payload(), timeout=30)
         self.message_post(body="Revision <b>Rev %d</b> locked (%s). Verification dispatched." % (
             self.revision_id, self.revision_hash[:8]))
         self.apply_mcp_findings(

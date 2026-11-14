@@ -91,9 +91,13 @@ class ClearpathSupplyLine(models.Model):
             for line in self:
                 if line.discharge_id.state == 'released':
                     raise UserError("This discharge packet is released and locked.")
-        bump = SUPPLY_GUARD_FIELDS & vals.keys() and not self.env.context.get('clearpath_skip_guard')
+        guard = not self.env.context.get('clearpath_skip_guard')
+        bump = SUPPLY_GUARD_FIELDS & vals.keys() and guard
         discharges = self.discharge_id
         res = super().write(vals)
         if bump:
             discharges._bump_if_locked("surgical supply edited")
+        elif 'billed_qty' in vals and guard and not self.env.context.get('clearpath_defer_sync'):
+            # billing fixed a quantity: keep the TPA claim in step (same revision, Insurance worker re-runs)
+            discharges._refresh_insurance_claim("a billed-quantity correction")
         return res

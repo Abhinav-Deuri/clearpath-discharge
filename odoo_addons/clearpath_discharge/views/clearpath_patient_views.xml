@@ -25,15 +25,28 @@
         <field name="arch" type="xml">
             <form string="Patient">
                 <sheet>
-                    <group>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Patient full name"/></h1>
+                    </div>
+                    <group string="Contact Details (saved to Odoo Contacts)">
                         <group>
-                            <field name="name"/>
-                            <field name="patient_code"/>
-                            <field name="email" widget="email"/>
                             <field name="phone" widget="phone"/>
+                            <field name="email" widget="email"/>
                         </group>
                         <group>
+                            <field name="street" placeholder="Street"/>
+                            <field name="city" placeholder="City"/>
+                            <field name="zip" placeholder="ZIP"/>
+                            <field name="country_id" options="{'no_open': True, 'no_create': True}"/>
+                        </group>
+                    </group>
+                    <group string="Clinical Admission Details">
+                        <group>
+                            <field name="patient_code"/>
                             <field name="bed_number"/>
+                        </group>
+                        <group>
                             <field name="insurance_provider"/>
                             <field name="policy_number"/>
                         </group>

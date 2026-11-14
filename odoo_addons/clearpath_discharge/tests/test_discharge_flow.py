@@ -193,8 +193,8 @@ class TestDischargeFlow(TransactionCase):
         d = self._locked()
         self._reconcile_and_sign_all_but_insurance(d)
         self.assertEqual((d.pharmacy_status, d.billing_status, d.insurance_status),
-                         ('approved', 'approved', 'flagged'))
-        self.assertEqual(d.state, 'flagged')  # insurance still outstanding
+                         ('approved', 'approved', 'pending'))  # claim rebuilt clean by the billing fix
+        self.assertEqual(d.state, 'flagged')  # insurance sign-off still outstanding
         self.assertTrue(d.coordinator_gate_locked)
         with self.assertRaises(UserError):
             d.action_coordinator_release()
@@ -348,7 +348,7 @@ class TestDischargeFlow(TransactionCase):
         self.assertEqual(d.insurance_button_text, '2 Holds')
         self._reconcile_and_sign_all_but_insurance(d)
         self.assertEqual((d.pharmacy_button_text, d.billing_button_text), ('Approved', 'Approved'))
-        self.assertEqual(d.insurance_hold_count, 1)  # unreconciled supplies at lock time
+        self.assertEqual(d.insurance_hold_count, 0)  # the billing fix cleared the supply hold
         d.write({'raw_handoff_note': 'late clinical change'})  # Stale-Write Guard
         self.assertEqual((d.pharmacy_button_text, d.billing_button_text, d.insurance_button_text),
                          ('Stale', 'Stale', 'Stale'))
@@ -488,4 +488,68 @@ class TestDischargeFlow(TransactionCase):
         self.assertEqual(arch.count('name="action_open_pharmacy_wizard"'), 4)
         self.assertEqual(arch.count('name="action_open_billing_wizard"'), 4)
         self.assertEqual(arch.count('name="action_open_insurance_wizard"'), 4)
+
+    # ------------------------------------------------------------ Phase 9: reception flow + claim sync
+    def test_31_reception_creates_contact_then_patient(self):
+        india = self.env.ref('base.in')
+        rita = self.env['clearpath.patient'].create({
+            'name': 'Rita Sen', 'phone': '+91 98000 00001', 'email': 'rita@example.com',
+            'street': '1 Main Road', 'city': 'Pune', 'zip': '411001', 'country_id': india.id,
+            'patient_code': 'PT-R1', 'bed_number': '12'})
+        partner = rita.partner_id
+        self.assertEqual((partner.name, partner.city, partner.zip, partner.country_id), ('Rita Sen', 'Pune', '411001', india))
+        self.assertEqual((rita.patient_code, rita.bed_number), ('PT-R1', '12'))
+        self.assertEqual(partner.patient_count, 1)
+        self.assertEqual(partner.action_open_clearpath_patient()['res_id'], rita.id)
+
+        # Reception first creates a plain Contact, clinical staff admit it as a patient later
+        walk_in = self.env['res.partner'].create({'name': 'Walk In', 'email': 'walk@example.com'})
+        self.assertEqual(walk_in.patient_count, 0)
+        self.assertEqual(walk_in.action_open_clearpath_patient()['context']['default_partner_id'], walk_in.id)
+        admitted = self.env['clearpath.patient'].create({'partner_id': walk_in.id, 'patient_code': 'PT-R2'})
+        self.assertEqual((admitted.name, admitted.email), ('Walk In', 'walk@example.com'))
+        self.assertEqual(self.env['res.partner'].search_count([('name', '=', 'Walk In')]), 1)  # no duplicate
+
+    def test_32_billing_fix_rebuilds_claim_without_new_revision(self):
+        d = self._locked()
+        self.assertIn('Unreconciled surgical supplies', d.insurance_hold_reasons)
+        for line in d.supply_line_ids:
+            line.billed_qty = line.surgical_qty_used
+        self.assertNotIn('Unreconciled surgical supplies', d.insurance_hold_reasons or '')
+        self.assertEqual((d.revision_id, d.billing_status), (1, 'flagged'))
+        self.assertIn('TPA claim rebuilt', ' '.join(d.message_ids.mapped('body')))
+
+    def test_33_billing_edit_withdraws_insurance_signoff(self):
+        d = self._locked()
+        self._reconcile_and_sign_all_but_insurance(d)
+        self._approve(d, 'insurance')
+        self.assertEqual((d.state, d.coordinator_gate_locked), ('cleared', False))
+        d.supply_line_ids[0].billed_qty = 0  # a later billing change invalidates the approved claim
+        self.assertEqual((d.state, d.coordinator_gate_locked), ('flagged', True))
+        self.assertIn(d.insurance_status, ('flagged', 'pending'))
+        self.assertFalse(d.insurance_approver_id)
+        self.assertEqual(d.revision_id, 2)  # still the same revision: only the claim was rebuilt
+
+    def test_34_flagged_buttons_show_count_and_triangle(self):
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        for count in ('pharmacy_conflict_count', 'unbilled_item_count', 'insurance_hold_count'):
+            self.assertIn('<field name="%s"/>' % count, arch)
+            self.assertIn("%s == 0 or" % count, arch)
+        self.assertEqual(arch.count('text-danger cp-beat-fade" data-icon="warning"'), 3)
+        d = self._locked()
+        self.assertEqual((d.pharmacy_conflict_count, d.unbilled_item_count, d.insurance_hold_count), (1, 2, 2))
+
+    def test_35_reset_demo_drops_the_invoice_link(self):
+        demo = self.env.ref('clearpath_discharge.demo_patient_pt402')
+        d = self.env['clearpath.discharge'].create({
+            'patient_id': demo.id, 'supply_line_ids': [(0, 0, {
+                'item_name': 'Gauze', 'surgical_qty_used': 1, 'billed_qty': 1, 'price_unit': 5.0})]})
+        d.with_context(clearpath_skip_guard=True).write({'billing_status': 'approved'})
+        d.action_generate_invoice()
+        move = d.invoice_id
+        move.action_post()  # posted invoices cannot be deleted: reset must only drop the link
+        d.action_reset_demo()
+        self.assertFalse(d.invoice_id)
+        self.assertTrue(move.exists())
 

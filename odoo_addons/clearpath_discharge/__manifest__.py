@@ -15,6 +15,7 @@
         "wizard/clearpath_wizards_views.xml",
         "views/clearpath_discharge_views.xml",
         "views/clearpath_patient_views.xml",
+        "views/res_partner_views.xml",
         "views/clearpath_menus.xml",
         "data/demo_patient_pt402.xml",
     ],

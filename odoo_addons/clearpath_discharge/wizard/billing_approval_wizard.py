@@ -92,6 +92,7 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
     # ------------------------------------------------------------------ action
     def _apply_billed_quantities(self):
         """Copy the edited Billed / Unit Price columns back to the supply lines (never bumps the revision)."""
+        changed = False
         for line in self.line_ids:
             supply = line.supply_line_id
             if not supply:
@@ -102,7 +103,10 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
             if supply.price_unit != line.price_unit:
                 vals['price_unit'] = max(line.price_unit, 0.0)
             if vals:
-                supply.write(vals)
+                supply.with_context(clearpath_defer_sync=True).write(vals)
+                changed = changed or 'billed_qty' in vals
+        if changed:  # one Insurance-worker re-run for all the corrections
+            self.discharge_id._refresh_insurance_claim("billing corrections")
 
     def action_approve(self):
         self.ensure_one()
