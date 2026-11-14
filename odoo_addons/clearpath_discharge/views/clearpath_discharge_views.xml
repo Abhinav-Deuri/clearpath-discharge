@@ -1,0 +1,305 @@
+<odoo>
+    <record id="clearpath_discharge_action" model="ir.actions.act_window">
+        <field name="name">Discharges</field>
+        <field name="res_model">clearpath.discharge</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="clearpath_discharge_view_list" model="ir.ui.view">
+        <field name="name">clearpath.discharge.list</field>
+        <field name="model">clearpath.discharge</field>
+        <field name="arch" type="xml">
+            <list string="Discharges"
+                  decoration-danger="state == 'flagged'"
+                  decoration-success="state in ('cleared', 'released')"
+                  decoration-muted="state == 'draft'">
+                <field name="patient_code"/>
+                <field name="patient_id"/>
+                <field name="bed_number"/>
+                <field name="revision_id" string="Rev"/>
+                <field name="pharmacy_status" widget="badge"
+                       decoration-danger="pharmacy_status == 'flagged'"
+                       decoration-success="pharmacy_status == 'approved'"
+                       decoration-warning="pharmacy_status == 'stale'"/>
+                <field name="billing_status" widget="badge"
+                       decoration-danger="billing_status == 'flagged'"
+                       decoration-success="billing_status == 'approved'"
+                       decoration-warning="billing_status == 'stale'"/>
+                <field name="insurance_status" widget="badge"
+                       decoration-danger="insurance_status == 'flagged'"
+                       decoration-success="insurance_status == 'approved'"
+                       decoration-warning="insurance_status == 'stale'"/>
+                <field name="state" widget="badge"
+                       decoration-danger="state == 'flagged'"
+                       decoration-success="state in ('cleared', 'released')"
+                       decoration-info="state in ('locked', 'verifying')"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="clearpath_discharge_view_search" model="ir.ui.view">
+        <field name="name">clearpath.discharge.search</field>
+        <field name="model">clearpath.discharge</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="patient_id"/>
+                <field name="patient_code"/>
+                <filter name="filter_flagged" string="Flagged" domain="[('state', '=', 'flagged')]"/>
+                <filter name="filter_awaiting" string="Awaiting Sign-off"
+                        domain="[('state', 'in', ('verifying', 'flagged'))]"/>
+                <filter name="filter_released" string="Released" domain="[('state', '=', 'released')]"/>
+                <group>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="clearpath_discharge_view_form" model="ir.ui.view">
+        <field name="name">clearpath.discharge.form</field>
+        <field name="model">clearpath.discharge</field>
+        <field name="arch" type="xml">
+            <form string="Discharge">
+                <header>
+                    <!-- Stage 1: doctor -->
+                    <button name="action_generate_ai_draft" type="object" string="Generate AI Draft"
+                            invisible="state != 'draft'" groups="clearpath_discharge.group_clearpath_doctor"/>
+                    <!-- Stage 2: HITL gate - doctor locks the revision -->
+                    <button name="action_lock_revision_and_verify" type="object"
+                            string="Lock Revision &amp; Run Checks" class="btn-primary"
+                            invisible="state != 'draft' or not ai_draft_summary"
+                            groups="clearpath_discharge.group_clearpath_doctor"/>
+                    <!-- Stage 3: HITL gate #1 - departmental sign-off -->
+                    <button name="action_pharmacist_approve" type="object" string="Pharmacist Sign-off"
+                            class="btn-primary"
+                            invisible="state not in ('flagged', 'verifying') or pharmacy_status in ('approved', 'stale')"
+                            groups="clearpath_discharge.group_clearpath_pharmacist"/>
+                    <button name="action_billing_approve" type="object" string="Billing Sign-off"
+                            class="btn-primary"
+                            invisible="state not in ('flagged', 'verifying') or billing_status in ('approved', 'stale')"
+                            groups="clearpath_discharge.group_clearpath_billing"/>
+                    <button name="action_admin_approve_insurance" type="object"
+                            string="Admin: Approve Insurance Claim" class="btn-primary"
+                            invisible="state not in ('flagged', 'verifying') or insurance_status in ('approved', 'stale')"
+                            groups="clearpath_discharge.group_clearpath_admin"/>
+                    <!-- Stage 4: HITL gate #2 - coordinator -->
+                    <button name="action_coordinator_release" type="object"
+                            string="Release Discharge Packet" class="btn-success"
+                            invisible="state != 'cleared' or coordinator_gate_locked"
+                            groups="clearpath_discharge.group_clearpath_coordinator"/>
+                    <!-- Demo helper: trigger the Stale-Write Guard live -->
+                    <button name="action_simulate_late_doctor_edit" type="object"
+                            string="Simulate Late Doctor Edit (Trigger Stale-Write Guard)"
+                            class="btn-warning"
+                            invisible="state in ('draft', 'released')"
+                            groups="clearpath_discharge.group_clearpath_doctor"
+                            confirm="Replace Amoxicillin with Azithromycin and bump the revision?"/>
+                    <button name="action_reset_demo" type="object" string="Reset Demo"
+                            class="btn-outline-secondary" groups="base.group_system"
+                            invisible="state == 'draft' and revision_id == 1 and not ai_draft_summary"
+                            confirm="Reset this discharge to a clean Rev 1 draft?"/>
+                    <button name="%(action_report_discharge_packet)d" type="action"
+                            string="Download PDF Report" class="btn-secondary"
+                            invisible="not ai_draft_summary"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,flagged,cleared,released"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Released" bg_color="text-bg-success"
+                            invisible="state != 'released'"/>
+
+                    <div class="alert alert-danger" role="alert"
+                         invisible="pharmacy_status != 'flagged'">
+                        <strong>Pharmacy safety conflict.</strong>
+                        <field name="pharmacy_summary" readonly="1" nolabel="1" class="d-inline"/>
+                        Change the medication to create a new revision, then re-run checks.
+                    </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="billing_status != 'flagged'">
+                        <strong>Surgical billing discrepancy.</strong>
+                        <field name="billing_summary" readonly="1" nolabel="1" class="d-inline"/>
+                        Correct the billed quantities, then sign off.
+                    </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="pharmacy_status != 'stale' and billing_status != 'stale' and insurance_status != 'stale'">
+                        <strong>Stale-Write Guard:</strong> the record was edited after locking. The previous
+                        checks and sign-offs are invalid. Lock this revision again to re-verify.
+                    </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="insurance_status != 'flagged'">
+                        <strong>TPA insurance claim on hold.</strong>
+                        See the Insurance &amp; TPA tab. The claim is released for admin sign-off only after
+                        every discrepancy is reconciled.
+                    </div>
+                    <div class="alert alert-success" role="alert"
+                         invisible="state != 'cleared' or coordinator_gate_locked">
+                        <strong>Release gate open.</strong> Pharmacy, Billing and Insurance all approved this revision.
+                    </div>
+
+                    <div class="alert alert-info d-flex align-items-center gap-2" role="alert"
+                         invisible="not token_savings_summary">
+                        <i class="fa fa-bolt"/>
+                        <span><strong>Token savings before AI call:</strong>
+                            <field name="token_savings_summary" readonly="1" nolabel="1" class="d-inline"/></span>
+                    </div>
+
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="badge rounded-pill text-bg-primary fs-6">
+                            Revision ID: Rev <field name="revision_id" class="oe_inline"/>
+                        </span>
+                        <span class="badge rounded-pill text-bg-secondary fs-6"
+                              invisible="not revision_hash">
+                            Snapshot Hash: <field name="sidecar_snapshot_id" class="oe_inline"
+                                                  invisible="not sidecar_snapshot_id"/>
+                        </span>
+                    </div>
+
+                    <group string="Multimodal Bedside Inputs" invisible="state != 'draft'"
+                           groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse">
+                        <group>
+                            <field name="voice_note_audio" filename="voice_note_filename" widget="binary"
+                                   string="Doctor voice note"/>
+                            <field name="voice_note_filename" invisible="1"/>
+                            <div colspan="2">
+                                <button name="action_transcribe_voice_and_draft" type="object"
+                                        string="&#127897;&#65039; Transcribe Voice &amp; Draft" class="btn-secondary"
+                                        invisible="not voice_note_audio"
+                                        groups="clearpath_discharge.group_clearpath_doctor"/>
+                            </div>
+                        </group>
+                        <group>
+                            <field name="nurse_checklist_image" widget="image" options="{'size': [0, 120]}"
+                                   string="Nurse supply sheet photo"/>
+                            <div colspan="2">
+                                <button name="action_scan_nurse_checklist" type="object"
+                                        string="&#128247; Scan Nurse Supply Sheet" class="btn-secondary"
+                                        invisible="not nurse_checklist_image"
+                                        groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse"/>
+                            </div>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group>
+                            <field name="patient_id" readonly="state != 'draft'"/>
+                            <field name="bed_number"/>
+                        </group>
+                        <group>
+                            <field name="revision_hash"/>
+                            <field name="coordinator_gate_locked"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Clinical Draft" name="clinical">
+                            <group>
+                                <field name="raw_handoff_note" readonly="state == 'released'"
+                                       placeholder="Paste the rounds / handoff note..."/>
+                                <field name="ai_draft_summary" readonly="state == 'released'"/>
+                                <field name="review_prompts" readonly="1"/>
+                            </group>
+                            <field name="medication_line_ids" readonly="state == 'released'">
+                                <list editable="bottom" decoration-danger="is_flagged">
+                                    <field name="drug_name"/>
+                                    <field name="dosage"/>
+                                    <field name="frequency"/>
+                                    <field name="conflict_reason"/>
+                                    <field name="is_flagged" column_invisible="True"/>
+                                </list>
+                            </field>
+                        </page>
+
+                        <page string="Pharmacy Safety Check" name="pharmacy">
+                            <group>
+                                <group>
+                                    <field name="pharmacy_status" widget="badge"
+                                           decoration-danger="pharmacy_status == 'flagged'"
+                                           decoration-success="pharmacy_status == 'approved'"
+                                           decoration-warning="pharmacy_status == 'stale'"/>
+                                    <field name="pharmacy_summary"/>
+                                </group>
+                                <group>
+                                    <field name="pharmacist_id"/>
+                                    <field name="pharmacy_approved_on"/>
+                                </group>
+                            </group>
+                            <separator string="Documented Allergies"/>
+                            <field name="allergy_ids" readonly="1">
+                                <list>
+                                    <field name="allergen"/>
+                                    <field name="reaction"/>
+                                    <field name="criticality" widget="badge"
+                                           decoration-danger="criticality == 'high'"/>
+                                </list>
+                            </field>
+                            <p class="text-muted">
+                                Per-medication conflict reasons are shown on the Clinical Draft tab.
+                            </p>
+                        </page>
+
+                        <page string="Surgical Billing Audit" name="billing">
+                            <group>
+                                <group>
+                                    <field name="billing_status" widget="badge"
+                                           decoration-danger="billing_status == 'flagged'"
+                                           decoration-success="billing_status == 'approved'"
+                                           decoration-warning="billing_status == 'stale'"/>
+                                    <field name="billing_summary"/>
+                                </group>
+                                <group>
+                                    <field name="billing_officer_id"/>
+                                    <field name="billing_approved_on"/>
+                                </group>
+                            </group>
+                            <field name="supply_line_ids">
+                                <list editable="bottom" decoration-danger="is_flagged">
+                                    <field name="item_name"/>
+                                    <field name="surgical_qty_used"/>
+                                    <field name="billed_qty"/>
+                                    <field name="discrepancy_qty"/>
+                                    <field name="is_flagged" column_invisible="True"/>
+                                </list>
+                            </field>
+                        </page>
+
+                        <page string="Insurance &amp; TPA Pre-Auth (Admin)" name="insurance">
+                            <group>
+                                <group>
+                                    <field name="insurance_status" widget="badge"
+                                           decoration-danger="insurance_status == 'flagged'"
+                                           decoration-success="insurance_status == 'approved'"
+                                           decoration-warning="insurance_status == 'stale'"/>
+                                    <field name="icd10_cpt_codes"/>
+                                    <field name="tpa_provider"/>
+                                    <field name="policy_number"/>
+                                </group>
+                                <group>
+                                    <field name="insurance_approver_id"/>
+                                    <field name="insurance_approved_on"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-warning" role="alert" invisible="not insurance_hold_reasons">
+                                <strong>Hold reasons</strong>
+                                <field name="insurance_hold_reasons" readonly="1" nolabel="1"/>
+                            </div>
+                            <field name="tpa_claim_html" readonly="1" nolabel="1"/>
+                            <p class="text-muted" invisible="not tpa_claim_document">
+                                The claim text reflects the last verification run. Approval re-checks the
+                                current supply and medication lines.
+                            </p>
+                        </page>
+
+                        <page string="Audit Packet" name="audit">
+                            <!-- Readable packet; the raw JSON is collapsed at its bottom -->
+                            <field name="audit_report_html" readonly="1" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+</odoo>

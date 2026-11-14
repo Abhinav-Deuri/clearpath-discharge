@@ -1,0 +1,44 @@
+<odoo>
+    <data noupdate="1">
+        <record id="demo_patient_pt402" model="clearpath.patient">
+            <field name="name">John Doe</field>
+            <field name="patient_code">PT-402</field>
+            <field name="bed_number">402</field>
+            <field name="insurance_provider">Demo TPA Health</field>
+            <field name="policy_number">POL-402-DEMO</field>
+        </record>
+
+        <record id="demo_allergy_penicillin" model="clearpath.allergy">
+            <field name="patient_id" ref="demo_patient_pt402"/>
+            <field name="allergen">Penicillin</field>
+            <field name="reaction">Anaphylaxis</field>
+            <field name="criticality">high</field>
+        </record>
+
+        <record id="demo_discharge_pt402" model="clearpath.discharge">
+            <field name="patient_id" ref="demo_patient_pt402"/>
+            <field name="raw_handoff_note">Rounds note - Bed 402, John Doe, POD1 laparoscopic appendectomy. Uncomplicated course, afebrile, pain controlled on oral analgesia, tolerating regular diet, ambulating independently. Incisions clean and dry. Plan: discharge home today. Start Amoxicillin 500mg three times daily for 5 days as post-operative prophylaxis. Surgical clinic follow-up in 2 weeks.</field>
+        </record>
+
+        <record id="demo_med_amoxicillin" model="clearpath.medication.line">
+            <field name="discharge_id" ref="demo_discharge_pt402"/>
+            <field name="drug_name">Amoxicillin</field>
+            <field name="dosage">500mg</field>
+            <field name="frequency">TID</field>
+        </record>
+
+        <record id="demo_supply_gauze" model="clearpath.supply.line">
+            <field name="discharge_id" ref="demo_discharge_pt402"/>
+            <field name="item_name">Hemostatic Gauze Pad</field>
+            <field name="surgical_qty_used">4</field>
+            <field name="billed_qty">2</field>
+        </record>
+
+        <record id="demo_supply_stapler" model="clearpath.supply.line">
+            <field name="discharge_id" ref="demo_discharge_pt402"/>
+            <field name="item_name">Skin Stapler</field>
+            <field name="surgical_qty_used">1</field>
+            <field name="billed_qty">0</field>
+        </record>
+    </data>
+</odoo>

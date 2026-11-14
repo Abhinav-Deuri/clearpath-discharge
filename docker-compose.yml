@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"   # localhost:5433 (5433 avoids clashing with a local Postgres)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [clearpath_net]
+
+  odoo:
+    image: odoo:20.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    ports:
+      - "8069:8069"   # http://localhost:8069
+    volumes:
+      - ./odoo_addons:/mnt/extra-addons
+      - odoo_data:/var/lib/odoo
+    command: ["odoo", "--dev=xml", "-d", "clearpath"]
+    networks: [clearpath_net]
+
+  sidecar_service:
+    build: ./sidecar_service
+    env_file:
+      - .env
+    environment:
+      SQLITE_PATH: /data/clearpath_state.db
+      ODOO_URL: http://odoo:8069
+    ports:
+      - "8000:8000"   # http://localhost:8000/docs
+    volumes:
+      - sidecar_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [clearpath_net]
+
+volumes:
+  pg_data:
+  odoo_data:
+  sidecar_data:
+
+networks:
+  clearpath_net:
+    driver: bridge

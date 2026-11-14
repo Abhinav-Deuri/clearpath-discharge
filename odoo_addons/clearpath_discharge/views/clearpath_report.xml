@@ -1,0 +1,177 @@
+<odoo>
+    <!-- Shared body: rendered in the form's "Audit Packet" tab AND in the PDF -->
+    <template id="audit_body">
+        <div style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color:#1f2937;">
+
+            <!-- Header (tables, not flexbox: wkhtmltopdf's engine is old) -->
+            <table style="width:100%; border-bottom:3px solid #0d6efd; margin-bottom:14px;">
+                <tr>
+                    <td style="vertical-align:top; padding-bottom:10px;">
+                        <div style="font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase;">ClearPath Discharge Packet</div>
+                        <div style="font-size:22px; font-weight:700;">
+                            <t t-out="o.patient_id.patient_code"/> &#183; <t t-out="o.patient_id.name"/>
+                        </div>
+                        <div style="font-size:12px; color:#6b7280;">Bed <t t-out="o.patient_id.bed_number or '-'"/></div>
+                    </td>
+                    <td style="vertical-align:top; text-align:right; padding-bottom:10px;">
+                        <t t-if="o.state == 'released'">
+                            <span style="display:inline-block; padding:3px 10px; border-radius:10px; font-size:12px; font-weight:700; color:#fff; background:#198754;">RELEASED</span>
+                        </t>
+                        <t t-else="">
+                            <span style="display:inline-block; padding:3px 10px; border-radius:10px; font-size:12px; font-weight:700; color:#664d03; background:#ffc107;">DRAFT - NOT RELEASED</span>
+                        </t>
+                        <div style="margin-top:6px;">
+                            <span style="display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; color:#fff; background:#0d6efd;">Rev <t t-out="o.revision_id"/></span>
+                            <span t-if="o.revision_hash" style="display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; color:#fff; background:#6b7280;"><t t-out="o.revision_hash[:8]"/></span>
+                        </div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:4px;" t-if="o.sidecar_snapshot_id">
+                            Snapshot <t t-out="o.sidecar_snapshot_id"/>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Findings cards -->
+            <table style="width:100%; border-collapse:separate; border-spacing:10px 0; margin:0 -10px 14px;">
+                <tr>
+                    <td t-attf-style="width:50%; vertical-align:top; border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; border-left:5px solid #{'#dc3545' if o.pharmacy_status == 'flagged' else '#198754' if o.pharmacy_status == 'approved' else '#ffc107'};">
+                        <div style="font-weight:700;">Pharmacy Safety</div>
+                        <div style="font-size:12px; text-transform:uppercase; color:#6b7280;"><t t-out="o.pharmacy_status"/></div>
+                        <div style="font-size:13px; margin-top:4px;"><t t-out="o.pharmacy_summary or 'No findings recorded for this revision.'"/></div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:6px;" t-if="o.pharmacist_id">
+                            Signed off by <t t-out="o.pharmacist_id.name"/>
+                            <t t-if="o.pharmacy_approved_on"> on <span t-field="o.pharmacy_approved_on"/></t>
+                        </div>
+                    </td>
+                    <td t-attf-style="width:50%; vertical-align:top; border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; border-left:5px solid #{'#dc3545' if o.billing_status == 'flagged' else '#198754' if o.billing_status == 'approved' else '#ffc107'};">
+                        <div style="font-weight:700;">Surgical Billing Audit</div>
+                        <div style="font-size:12px; text-transform:uppercase; color:#6b7280;"><t t-out="o.billing_status"/></div>
+                        <div style="font-size:13px; margin-top:4px;"><t t-out="o.billing_summary or 'No findings recorded for this revision.'"/></div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:6px;" t-if="o.billing_officer_id">
+                            Signed off by <t t-out="o.billing_officer_id.name"/>
+                            <t t-if="o.billing_approved_on"> on <span t-field="o.billing_approved_on"/></t>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Insurance / TPA -->
+            <table style="width:100%; margin-bottom:14px;">
+                <tr>
+                    <td t-attf-style="vertical-align:top; border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; border-left:5px solid #{'#dc3545' if o.insurance_status == 'flagged' else '#198754' if o.insurance_status == 'approved' else '#ffc107'};">
+                        <div style="font-weight:700;">Insurance &amp; TPA Pre-Authorization</div>
+                        <div style="font-size:12px; text-transform:uppercase; color:#6b7280;"><t t-out="o.insurance_status"/></div>
+                        <div style="font-size:13px; margin-top:4px;">
+                            ICD-10 / CPT: <b><t t-out="o.icd10_cpt_codes or 'Not mapped'"/></b>
+                            &#183; <t t-out="o.patient_id.insurance_provider or '-'"/>
+                            / <t t-out="o.patient_id.policy_number or '-'"/>
+                        </div>
+                        <div style="font-size:12px; margin-top:4px; white-space:pre-wrap;" t-if="o.insurance_hold_reasons"><t t-out="o.insurance_hold_reasons"/></div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:6px;" t-if="o.insurance_approver_id">
+                            Signed off by <t t-out="o.insurance_approver_id.name"/>
+                            <t t-if="o.insurance_approved_on"> on <span t-field="o.insurance_approved_on"/></t>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Discharge summary -->
+            <div style="font-weight:700; margin:12px 0 4px;">Discharge Summary</div>
+            <div style="font-size:13px; background:#f8f9fa; border-radius:6px; padding:10px 12px;">
+                <t t-if="o.ai_draft_summary" t-out="o.ai_draft_summary_html"/>
+                <t t-else="">No summary generated yet.</t>
+            </div>
+
+            <!-- Medications -->
+            <div style="font-weight:700; margin:14px 0 4px;">Medications</div>
+            <table class="table table-sm" style="font-size:13px; width:100%; page-break-inside:avoid;">
+                <thead><tr><th>Drug</th><th>Dosage</th><th>Frequency</th><th>Safety</th></tr></thead>
+                <tbody>
+                    <t t-foreach="o.medication_line_ids" t-as="m">
+                        <tr t-attf-style="#{'background:#fdecea;' if m.is_flagged else ''}">
+                            <td><t t-out="m.drug_name"/></td>
+                            <td><t t-out="m.dosage"/></td>
+                            <td><t t-out="m.frequency"/></td>
+                            <td>
+                                <t t-if="m.is_flagged"><b style="color:#dc3545;">Conflict:</b> <t t-out="m.conflict_reason"/></t>
+                                <t t-else=""><span style="color:#198754;">OK</span></t>
+                            </td>
+                        </tr>
+                    </t>
+                </tbody>
+            </table>
+
+            <!-- Supplies -->
+            <div style="font-weight:700; margin:14px 0 4px;">Surgical Supplies</div>
+            <table class="table table-sm" style="font-size:13px; width:100%; page-break-inside:avoid;">
+                <thead><tr><th>Item</th><th style="text-align:right;">Used</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Unbilled</th></tr></thead>
+                <tbody>
+                    <t t-foreach="o.supply_line_ids" t-as="s">
+                        <tr t-attf-style="#{'background:#fdecea;' if s.is_flagged else ''}">
+                            <td><t t-out="s.item_name"/></td>
+                            <td style="text-align:right;"><t t-out="s.surgical_qty_used"/></td>
+                            <td style="text-align:right;"><t t-out="s.billed_qty"/></td>
+                            <td style="text-align:right;">
+                                <b t-if="s.is_flagged" style="color:#dc3545;">+<t t-out="s.discrepancy_qty"/></b>
+                                <span t-else="" style="color:#198754;">0</span>
+                            </td>
+                        </tr>
+                    </t>
+                </tbody>
+            </table>
+
+            <!-- Timeline -->
+            <div style="font-weight:700; margin:14px 0 4px;">Timeline</div>
+            <table class="table table-sm" style="font-size:13px; width:100%; page-break-inside:avoid;">
+                <tbody>
+                    <tr><td style="width:40%;">Drafted</td><td><span t-field="o.create_date"/></td></tr>
+                    <tr t-if="o.locked_on"><td>Revision locked (doctor)</td><td><span t-field="o.locked_on"/></td></tr>
+                    <tr t-if="o.pharmacy_approved_on"><td>Pharmacist sign-off</td><td><span t-field="o.pharmacy_approved_on"/> &#183; <t t-out="o.pharmacist_id.name"/></td></tr>
+                    <tr t-if="o.billing_approved_on"><td>Billing sign-off</td><td><span t-field="o.billing_approved_on"/> &#183; <t t-out="o.billing_officer_id.name"/></td></tr>
+                    <tr t-if="o.insurance_approved_on"><td>Insurance sign-off</td><td><span t-field="o.insurance_approved_on"/> &#183; <t t-out="o.insurance_approver_id.name"/></td></tr>
+                    <tr t-if="o.released_on"><td>Released (coordinator)</td><td><span t-field="o.released_on"/> &#183; <t t-out="o.coordinator_id.name"/></td></tr>
+                </tbody>
+            </table>
+
+            <!-- Raw JSON, collapsed in the app -->
+            <details t-if="o.audit_snapshot_json" style="margin-top:10px;">
+                <summary style="cursor:pointer; color:#6b7280; font-size:12px;">Raw audit snapshot JSON</summary>
+                <pre style="font-size:11px; background:#f8f9fa; padding:8px; border-radius:6px; white-space:pre-wrap;"><t t-out="o.audit_snapshot_json"/></pre>
+            </details>
+        </div>
+    </template>
+
+    <!-- PDF wrapper -->
+    <template id="report_discharge_packet">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.basic_layout">
+                    <div class="page">
+                        <t t-call="clearpath_discharge.audit_body"/>
+                        <table style="width:100%; margin-top:28px; font-size:12px; border-collapse:separate; border-spacing:16px 0;">
+                            <tr>
+                                <td style="width:25%; border-top:1px solid #6b7280; padding-top:4px;">Pharmacist signature</td>
+                                <td style="width:25%; border-top:1px solid #6b7280; padding-top:4px;">Billing Officer signature</td>
+                                <td style="width:25%; border-top:1px solid #6b7280; padding-top:4px;">Admin / Insurance signature</td>
+                                <td style="width:25%; border-top:1px solid #6b7280; padding-top:4px;">Coordinator signature</td>
+                            </tr>
+                        </table>
+                        <div style="margin-top:14px; font-size:10px; color:#9ca3af; text-align:center;">
+                            Generated by ClearPath &#183; Rev <t t-out="o.revision_id"/> &#183; <t t-out="o.revision_hash"/>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_discharge_packet" model="ir.actions.report">
+        <field name="name">Discharge Packet (PDF)</field>
+        <field name="model">clearpath.discharge</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">clearpath_discharge.report_discharge_packet</field>
+        <field name="print_report_name">'ClearPath_%s_Rev%s' % (object.patient_code, object.revision_id)</field>
+        <field name="binding_model_id" ref="model_clearpath_discharge"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

@@ -1,0 +1,7 @@
+<odoo>
+    <menuitem id="clearpath_menu_root" name="ClearPath Discharge" sequence="10"/>
+    <menuitem id="clearpath_menu_discharges" name="Discharges" parent="clearpath_menu_root"
+              action="clearpath_discharge_action" sequence="10"/>
+    <menuitem id="clearpath_menu_patients" name="Patients" parent="clearpath_menu_root"
+              action="clearpath_patient_action" sequence="20"/>
+</odoo>
