@@ -116,9 +116,12 @@
                         </button>
                         <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
                                 title="Pharmacy: open conflict(s), click to review" invisible="pharmacy_conflict_count == 0 or pharmacy_status in ('stale', 'approved')">
-                            <div class="o_stat_info d-flex flex-row align-items-center justify-content-center w-100">
-                                <span class="o_stat_value fs-4 me-2"><field name="pharmacy_conflict_count"/></span>
-                                <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                            <div class="o_stat_info w-100">
+                                <div class="d-flex flex-row align-items-center justify-content-center">
+                                    <span class="o_stat_value fs-4 me-2"><field name="pharmacy_conflict_count"/></span>
+                                    <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                                </div>
+                                <span class="o_stat_text fw-bold text-center d-block">Pharmacy</span>
                             </div>
                         </button>
                         <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
@@ -138,9 +141,12 @@
                         </button>
                         <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
                                 title="Billing: open conflict(s), click to review" invisible="unbilled_item_count == 0 or billing_status in ('stale', 'approved')">
-                            <div class="o_stat_info d-flex flex-row align-items-center justify-content-center w-100">
-                                <span class="o_stat_value fs-4 me-2"><field name="unbilled_item_count"/></span>
-                                <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                            <div class="o_stat_info w-100">
+                                <div class="d-flex flex-row align-items-center justify-content-center">
+                                    <span class="o_stat_value fs-4 me-2"><field name="unbilled_item_count"/></span>
+                                    <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                                </div>
+                                <span class="o_stat_text fw-bold text-center d-block">Billing</span>
                             </div>
                         </button>
                         <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
@@ -160,9 +166,12 @@
                         </button>
                         <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
                                 title="Insurance: open conflict(s), click to review" invisible="insurance_hold_count == 0 or insurance_status in ('stale', 'approved')">
-                            <div class="o_stat_info d-flex flex-row align-items-center justify-content-center w-100">
-                                <span class="o_stat_value fs-4 me-2"><field name="insurance_hold_count"/></span>
-                                <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                            <div class="o_stat_info w-100">
+                                <div class="d-flex flex-row align-items-center justify-content-center">
+                                    <span class="o_stat_value fs-4 me-2"><field name="insurance_hold_count"/></span>
+                                    <i class="oi oi-2x text-danger cp-beat-fade" data-icon="warning"/>
+                                </div>
+                                <span class="o_stat_text fw-bold text-center d-block">Insurance</span>
                             </div>
                         </button>
                         <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
