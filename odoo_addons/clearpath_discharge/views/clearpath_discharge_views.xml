@@ -242,6 +242,7 @@
 
                     <!-- Patient & governance banner -->
                     <div class="o_cp_banner d-flex flex-wrap align-items-center justify-content-between px-4 py-3 mb-4">
+                        <span class="o_cp_shine"/>
                         <div class="d-flex flex-wrap align-items-center gap-3">
                             <span class="d-inline-flex align-items-center">
                                 <i class="oi text-primary me-1" data-icon="person"/><span class="text-muted me-1">Patient:</span>

@@ -29,6 +29,7 @@
         ],
         'web.assets_backend': [
             'clearpath_discharge/static/src/voice_recorder/voice_recorder.js',
+            'clearpath_discharge/static/src/fx/clearpath_fx.js',
             'clearpath_discharge/static/src/scss/clearpath_wizards.scss',
             'clearpath_discharge/static/src/scss/clearpath_theme.scss',
         ],

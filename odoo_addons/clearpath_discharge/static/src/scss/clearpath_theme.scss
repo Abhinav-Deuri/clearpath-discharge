@@ -409,6 +409,252 @@
     animation: cp-sheen 1.3s linear infinite;
 }
 
+// =====================================================================================================
+// Interaction layer (pairs with static/src/fx/clearpath_fx.js, which sets --cp-mx / --cp-my / --cp-rx /
+// --cp-ry on the hovered card and draws ripples + confetti in .o_cp_fx_layer).
+// =====================================================================================================
+@keyframes cp-ripple { from { transform: scale(0); opacity: .45; } to { transform: scale(1); opacity: 0; } }
+@keyframes cp-gradient { 0%, 100% { background-position: 0 0, 0% 50%; } 50% { background-position: 0 0, 100% 50%; } }
+@keyframes cp-shine { 0%, 70% { transform: translateX(-130%) skewX(-20deg); } 100% { transform: translateX(430%) skewX(-20deg); } }
+@keyframes cp-sonar { from { box-shadow: 0 0 0 0 rgba(229, 72, 77, .45); } to { box-shadow: 0 0 0 12px rgba(229, 72, 77, 0); } }
+@keyframes cp-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(25, 118, 210, .35); } 50% { box-shadow: 0 0 0 6px rgba(25, 118, 210, 0); } }
+@keyframes cp-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes cp-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(12deg); } }
+@keyframes cp-row { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes cp-toast { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+@keyframes cp-drop { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes cp-wave { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@keyframes cp-ants { to { background-position: 16px 0, -16px 100%, 0 -16px, 100% 16px; } }
+@keyframes cp-aurora { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(4%, 3%) scale(1.08); } }
+
+.o_cp_fx_layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    pointer-events: none;
+    overflow: hidden;
+
+    .o_cp_ripple_clip { position: absolute; overflow: hidden; }
+    .o_cp_ripple {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(25, 118, 210, .35);
+        animation: cp-ripple .6s var(--cp-ease) both;
+
+        &.o_cp_ripple_light { background: rgba(255, 255, 255, .55); }
+    }
+    .o_cp_confetti { position: absolute; inset: 0; width: 100%; height: 100%; }
+}
+
+// -- Soft moving light behind the whole page
+.o_web_client > .o_action_manager {
+    position: relative;
+    isolation: isolate;
+
+    &::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+            radial-gradient(40% 35% at 12% 8%, rgba(25, 118, 210, .13), transparent 70%),
+            radial-gradient(35% 30% at 92% 18%, rgba(100, 181, 246, .16), transparent 70%),
+            radial-gradient(45% 40% at 70% 100%, rgba(11, 42, 111, .07), transparent 70%);
+        animation: cp-aurora 18s ease-in-out infinite;
+    }
+}
+.o_form_view .o_form_sheet_bg { background: transparent; }
+
+// -- Navbar: sliding underline
+.o_main_navbar .o_menu_sections {
+    .o_nav_entry, .dropdown-toggle {
+        position: relative;
+
+        &::after {
+            content: "";
+            position: absolute;
+            left: 20%;
+            right: 20%;
+            bottom: 2px;
+            height: 2px;
+            border: 0;
+            margin: 0;
+            border-radius: 2px;
+            background: #8ec5ff;
+            transform: scaleX(0);
+            transition: transform .25s var(--cp-ease);
+        }
+        &:hover::after, &.show::after { transform: scaleX(1); }
+    }
+}
+
+// -- Dropdowns and toasts
+.o-dropdown--menu.dropdown-menu {
+    border: 1px solid var(--cp-line);
+    border-radius: 14px;
+    box-shadow: var(--cp-shadow-hover);
+    animation: cp-drop .18s var(--cp-ease) both;
+
+    .dropdown-item { transition: background-color .15s var(--cp-ease), padding-left .15s var(--cp-ease); }
+}
+.o_notification {
+    border-radius: 14px !important;
+    overflow: hidden;
+    animation: cp-toast .35s var(--cp-ease) both;
+}
+.modal.show { backdrop-filter: blur(3px); }
+
+// -- Inputs: blue focus line
+.o_form_view .o_input {
+    transition: border-color .2s var(--cp-ease), box-shadow .2s var(--cp-ease);
+    &:focus { box-shadow: 0 2px 0 0 var(--cp-blue); }
+}
+
+// -- Lists: rows arrive one after another, and slide a blue marker in on hover
+.o_list_view .o_content > .o_list_renderer .o_list_table tbody tr.o_data_row {
+    animation: cp-row .4s var(--cp-ease) both;
+    @for $i from 1 through 14 {
+        &:nth-child(#{$i}) { animation-delay: #{$i * .035}s; }
+    }
+    > td:first-child { box-shadow: inset 0 0 0 0 var(--cp-blue); transition: box-shadow .2s var(--cp-ease); }
+    &:hover > td:first-child { box-shadow: inset 3px 0 0 0 var(--cp-blue); }
+}
+.o_web_client .badge { transition: transform .15s var(--cp-ease); }
+.o_data_row:hover .badge { transform: scale(1.06); }
+
+// -- Status bar: the current step breathes
+.o_statusbar_status .o_arrow_button_current { animation: cp-glow 2.2s ease-in-out infinite; }
+
+// -- Cursor glow on cards
+.o_cp_panel, .o_cp_subpanel, .o_cp_tile, .o_cp_card, .oe_stat_button.o_cp_stat {
+    --cp-mx: -400px;
+    --cp-my: -400px;
+    // !important: the cards set `background` as a shorthand with more specific selectors.
+    background-image: radial-gradient(260px circle at var(--cp-mx) var(--cp-my), rgba(25, 118, 210, .10), transparent 70%) !important;
+    background-repeat: no-repeat;
+}
+
+.o_clearpath_discharge_form {
+    // -- Hero banner: slow moving gradient, cursor light, periodic shine, slight 3D tilt
+    .o_cp_banner {
+        --cp-mx: -400px;
+        --cp-my: -400px;
+        --cp-rx: 0deg;
+        --cp-ry: 0deg;
+        background:
+            radial-gradient(320px circle at var(--cp-mx) var(--cp-my), rgba(255, 255, 255, .20), transparent 70%),
+            linear-gradient(120deg, #0b2a6f, #123a94, #1b55c4, #123a94, #0b2a6f);
+        background-size: 100% 100%, 300% 300%;
+        // `backwards`, not `both`: a finished entrance must not pin transform, or the tilt below never shows.
+        animation: cp-rise .5s var(--cp-ease) backwards, cp-gradient 14s ease-in-out infinite;
+        transform: perspective(1200px) rotateX(var(--cp-rx)) rotateY(var(--cp-ry));
+        transition: transform .25s var(--cp-ease), box-shadow .25s var(--cp-ease);
+
+        &:hover { box-shadow: 0 20px 40px rgba(11, 42, 111, .36); }
+
+        .o_cp_shine {
+            position: absolute;
+            z-index: 0;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 25%;
+            pointer-events: none;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .16), transparent);
+            animation: cp-shine 7s ease-in-out infinite;
+        }
+        .o_cp_pill { transition: transform .18s var(--cp-ease), background-color .18s var(--cp-ease); }
+        .o_cp_pill:hover { transform: translateY(-2px) scale(1.04); background: rgba(255, 255, 255, .24); }
+        .badge { transition: transform .18s var(--cp-ease); }
+        .badge:hover { transform: translateY(-2px) scale(1.04); }
+        .badge.text-bg-danger .oi { display: inline-block; animation: cp-wiggle 2.4s ease-in-out infinite; }
+        .badge.text-bg-success { animation: cp-glow 2.2s ease-in-out infinite; }
+    }
+
+    // -- Smart tiles: 3D tilt towards the cursor, icon chip pops
+    .oe_stat_button.o_cp_stat {
+        --cp-rx: 0deg;
+        --cp-ry: 0deg;
+
+        &:hover {
+            transform: perspective(600px) rotateX(var(--cp-rx)) rotateY(var(--cp-ry)) translateY(-3px) scale(1.03) !important;
+        }
+        .o_button_icon { transition: transform .25s var(--cp-ease); }
+        &:hover .o_button_icon { transform: scale(1.15) rotate(-8deg); }
+    }
+
+    // -- Icon chips react to their card
+    .o_cp_chip { transition: transform .25s var(--cp-ease), box-shadow .25s var(--cp-ease); }
+    .o_cp_subpanel:hover .o_cp_chip, .o_cp_panel_accent:hover h4 .o_cp_chip { transform: scale(1.12) rotate(-6deg); }
+    .o_cp_chip_red { animation: cp-sonar 1.8s ease-out infinite; }
+
+    // -- Drop zone: marching dashes + bobbing camera on hover
+    .o_cp_drop:hover {
+        border-color: transparent;
+        background-image:
+            linear-gradient(90deg, var(--cp-blue) 50%, transparent 50%),
+            linear-gradient(90deg, var(--cp-blue) 50%, transparent 50%),
+            linear-gradient(0deg, var(--cp-blue) 50%, transparent 50%),
+            linear-gradient(0deg, var(--cp-blue) 50%, transparent 50%);
+        background-size: 16px 1.5px, 16px 1.5px, 1.5px 16px, 1.5px 16px;
+        background-position: 0 0, 0 100%, 0 0, 100% 0;
+        background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+        background-color: var(--cp-blue-soft);
+        animation: cp-ants .6s linear infinite;
+
+        img { animation: cp-bob 1.4s ease-in-out infinite; }
+    }
+
+    // -- Summary rows cascade in; each row highlights on hover
+    .o_cp_summary_body tr {
+        animation: cp-row .4s var(--cp-ease) both;
+        transition: background-color .15s var(--cp-ease);
+        @for $i from 1 through 12 {
+            &:nth-child(#{$i}) { animation-delay: #{.1 + $i * .05}s; }
+        }
+        &:hover { background-color: var(--cp-blue-soft); }
+    }
+
+    // -- Tabs: content fades up when switched
+    .o_notebook .tab-pane.active { animation: cp-rise .35s var(--cp-ease) both; }
+    .o_notebook .nav-tabs .nav-link:hover { transform: translateY(-2px); }
+
+    // -- Voice recorder: live bars while recording
+    .o_cp_wave {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        height: 22px;
+
+        i {
+            width: 3px;
+            height: 100%;
+            border-radius: 2px;
+            background: #e5484d;
+            transform-origin: center;
+            animation: cp-wave .9s ease-in-out infinite;
+
+            @for $i from 1 through 7 {
+                &:nth-child(#{$i}) { animation-delay: #{$i * -.13}s; }
+            }
+        }
+    }
+}
+
+// -- Pop-up tiles tilt too
+.o_clearpath_wizard .o_cp_tiles .o_cp_tile {
+    --cp-rx: 0deg;
+    --cp-ry: 0deg;
+    &:hover { transform: perspective(600px) rotateX(var(--cp-rx)) rotateY(var(--cp-ry)) translateY(-2px) !important; }
+}
+
+// -- Slim blue scrollbars
+.o_web_client {
+    scrollbar-width: thin;
+    scrollbar-color: #b9cdea transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .o_web_client *, .modal * {
         animation-duration: .001s !important;

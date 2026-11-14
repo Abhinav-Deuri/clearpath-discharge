@@ -72,6 +72,7 @@ export class VoiceRecorderField extends Component {
                 </label>
                 <button type="button" class="btn btn-link" t-if="this.hasAudio and !this.props.readonly and !this.state.recording"
                         t-on-click="this.clear">Remove</button>
+                <span class="o_cp_wave" t-if="this.state.recording" title="Recording"><i/><i/><i/><i/><i/><i/><i/></span>
                 <span class="text-muted" t-if="this.state.busy">Converting&#8230;</span>
             </div>
             <audio controls="controls" t-if="this.state.previewUrl" t-att-src="this.state.previewUrl" style="max-width:360px"/>
