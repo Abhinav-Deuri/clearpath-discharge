@@ -162,3 +162,21 @@
 .o_clearpath_discharge_form .o_statusbar_status:has(.o_arrow_button_current[data-value="released"]) {
     display: none !important;
 }
+
+// Taller smart buttons so the count, icon and department label all fit inside the box.
+.o_clearpath_discharge_form .oe_button_box .oe_stat_button {
+    height: auto;
+    min-height: 4.75rem;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+    align-items: center;
+
+    .o_stat_info {
+        overflow: visible;
+        justify-content: center;
+    }
+    .o_stat_text, .o_stat_value {
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+}
