@@ -110,11 +110,11 @@
                         <field name="insurance_hold_count" invisible="1"/>
                         <field name="invoice_id" invisible="1"/>
                         <field name="top_alert_kind" invisible="1"/>
-                        <button name="action_open_alerts_wizard" type="object" class="oe_stat_button"
+                        <button name="action_open_alerts_wizard" type="object" class="oe_stat_button o_cp_stat"
                                 icon="notifications" invisible="alert_count == 0">
                             <field name="alert_count" widget="statinfo" string="Alerts"/>
                         </button>
-                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_flagged"
                                 title="Pharmacy: open conflict(s), click to review" invisible="pharmacy_conflict_count == 0 or pharmacy_status in ('stale', 'approved')">
                             <div class="o_stat_info w-100">
                                 <div class="d-flex flex-row align-items-center justify-content-center">
@@ -124,22 +124,22 @@
                                 <span class="o_stat_text fw-bold text-center d-block">Pharmacy</span>
                             </div>
                         </button>
-                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_pending"
                                 title="Pharmacy: ready for review" invisible="state == 'draft' or pharmacy_status not in ('pending', 'flagged') or pharmacy_conflict_count != 0">
                             <i class="oi oi-2x oi-spin text-muted o_button_icon" data-icon="settings"/>
                             <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
                         </button>
-                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_approved"
                                 title="Pharmacy: approved" invisible="pharmacy_status != 'approved'">
                             <i class="oi oi-2x text-success o_button_icon" data-icon="security"/>
                             <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
                         </button>
-                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_stale"
                                 title="Pharmacy: stale, re-lock to re-verify" invisible="pharmacy_status != 'stale'">
                             <i class="oi oi-2x text-warning o_button_icon" data-icon="refresh"/>
                             <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_flagged"
                                 title="Billing: open conflict(s), click to review" invisible="unbilled_item_count == 0 or billing_status in ('stale', 'approved')">
                             <div class="o_stat_info w-100">
                                 <div class="d-flex flex-row align-items-center justify-content-center">
@@ -149,22 +149,22 @@
                                 <span class="o_stat_text fw-bold text-center d-block">Billing</span>
                             </div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_pending"
                                 title="Billing: ready for review" invisible="state == 'draft' or billing_status not in ('pending', 'flagged') or unbilled_item_count != 0">
                             <i class="oi oi-2x oi-spin text-muted o_button_icon" data-icon="settings"/>
                             <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_approved"
                                 title="Billing: approved" invisible="billing_status != 'approved'">
                             <i class="oi oi-2x text-success o_button_icon" data-icon="security"/>
                             <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_stale"
                                 title="Billing: stale, re-lock to re-verify" invisible="billing_status != 'stale'">
                             <i class="oi oi-2x text-warning o_button_icon" data-icon="refresh"/>
                             <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
                         </button>
-                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_flagged"
                                 title="Insurance: open conflict(s), click to review" invisible="insurance_hold_count == 0 or insurance_status in ('stale', 'approved')">
                             <div class="o_stat_info w-100">
                                 <div class="d-flex flex-row align-items-center justify-content-center">
@@ -174,22 +174,22 @@
                                 <span class="o_stat_text fw-bold text-center d-block">Insurance</span>
                             </div>
                         </button>
-                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_pending"
                                 title="Insurance: ready for review" invisible="state == 'draft' or insurance_status not in ('pending', 'flagged') or insurance_hold_count != 0">
                             <i class="oi oi-2x oi-spin text-muted o_button_icon" data-icon="settings"/>
                             <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
                         </button>
-                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_approved"
                                 title="Insurance: approved" invisible="insurance_status != 'approved'">
                             <i class="oi oi-2x text-success o_button_icon" data-icon="security"/>
                             <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
                         </button>
-                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat o_cp_stat_stale"
                                 title="Insurance: stale, re-lock to re-verify" invisible="insurance_status != 'stale'">
                             <i class="oi oi-2x text-warning o_button_icon" data-icon="refresh"/>
                             <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
                         </button>
-                        <button name="action_view_invoice" type="object" class="oe_stat_button"
+                        <button name="action_view_invoice" type="object" class="oe_stat_button o_cp_stat"
                                 icon="payments" invisible="not invoice_id">
                             <div class="o_stat_info">
                                 <span class="o_stat_value"><field name="invoice_label"/></span>
