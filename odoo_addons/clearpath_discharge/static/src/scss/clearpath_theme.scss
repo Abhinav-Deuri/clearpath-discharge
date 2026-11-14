@@ -630,9 +630,10 @@
             .btn { position: relative; z-index: 1; box-shadow: var(--cp-shadow); }
             .o_select_file_button {
                 position: static;
-                color: #fff;
-                background: var(--cp-blue);
-                border-color: var(--cp-blue);
+                color: #fff !important;
+                background: var(--cp-blue) !important;
+                border-color: var(--cp-blue) !important;
+                opacity: 1 !important;
 
                 // invisible sheet over the whole box: a click anywhere opens the file picker
                 &::after { content: ""; position: absolute; inset: 0; cursor: pointer; }
