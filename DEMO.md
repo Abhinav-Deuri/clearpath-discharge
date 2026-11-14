@@ -22,6 +22,10 @@ The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, In
 | 7 | **Pharmacy** button -> **Approve & Resolve**; **Billing** button -> type billed 4 and 1 in the Billed column -> **Approve & Resolve**; **Insurance** button -> **Approve & Resolve** | Three departments, the SAME revision. Only now the green "Release gate open" banner appears. (human gate #2) | 0:40 |
 | 8 | **Release Discharge Packet** | Final locked packet; edits are refused. Open **Audit Packet**, then **Download PDF Report** (includes ICD-10/CPT and four signature lines). | 0:25 |
 
+**Bonus (Invoicing + Contacts):** after the Billing sign-off, type a **Unit Price** for each item in the Billing pop-up, then click **Generate Final Invoice** (header). The new **Invoice** smart button opens a draft customer invoice for John Doe's Contact record (Contacts app).
+
+**What the icons mean:** each department button shows a spinning grey gear (checks pending), a pulsing red exclamation (needs attention), a green shield (approved) or an amber refresh (stale). Ribbons: red *Allergy Hold*, green *Cleared*, green *Released* (the status bar hides once released).
+
 **After the demo:** click **Reset Demo** to go back to a clean Rev 1.
 
 **Rules worth saying out loud**

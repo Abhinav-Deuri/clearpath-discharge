@@ -59,7 +59,7 @@
         <field name="name">clearpath.discharge.form</field>
         <field name="model">clearpath.discharge</field>
         <field name="arch" type="xml">
-            <form string="Discharge">
+            <form string="Discharge" class="o_clearpath_discharge_form">
                 <header>
                     <!-- Stage 1: doctor -->
                     <button name="action_generate_ai_draft" type="object" icon="fa-magic" string="Generate AI Draft"
@@ -89,58 +89,121 @@
                     <button name="%(action_report_discharge_packet)d" type="action" icon="fa-file-pdf-o"
                             string="Download PDF Report" class="btn-secondary"
                             invisible="not ai_draft_summary"/>
+                    <button name="action_generate_invoice" type="object" icon="fa-file-text-o"
+                            string="Generate Final Invoice" class="btn-primary"
+                            invisible="invoice_id or (billing_status != 'approved' and state not in ('cleared', 'released'))"
+                            groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_admin"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,flagged,cleared,released"
                            invisible="state == 'released'"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
-                        <field name="pharmacy_conflict_count" invisible="1"/>
-                        <field name="unbilled_item_count" invisible="1"/>
-                        <field name="insurance_hold_count" invisible="1"/>
+                        <field name="pharmacy_status" invisible="1"/>
+                        <field name="billing_status" invisible="1"/>
+                        <field name="insurance_status" invisible="1"/>
+                        <field name="invoice_id" invisible="1"/>
+                        <field name="top_alert_kind" invisible="1"/>
                         <button name="action_open_alerts_wizard" type="object" class="oe_stat_button"
                                 icon="fa-bell" invisible="alert_count == 0">
                             <field name="alert_count" widget="statinfo" string="Alerts"/>
                         </button>
-                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button"
-                                icon="fa-medkit" invisible="state == 'draft'">
-                            <div class="o_stat_info">
-                                <span class="o_stat_value">
-                                    <field name="pharmacy_button_text" widget="badge"
-                                           decoration-danger="pharmacy_status != 'approved' and pharmacy_status != 'stale' and pharmacy_conflict_count &gt; 0"
-                                           decoration-success="pharmacy_status == 'approved' or (pharmacy_status == 'pending' and pharmacy_conflict_count == 0)"
-                                           decoration-secondary="pharmacy_status == 'stale'"/>
-                                </span>
-                                <span class="o_stat_text">Pharmacy Safety</span>
-                            </div>
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                                title="Pharmacy: checks pending" invisible="state == 'draft' or pharmacy_status != 'pending'">
+                            <i class="fa fa-2x fa-cog fa-spin text-muted o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button"
-                                icon="fa-calculator" invisible="state == 'draft'">
-                            <div class="o_stat_info">
-                                <span class="o_stat_value">
-                                    <field name="billing_button_text" widget="badge"
-                                           decoration-warning="billing_status != 'approved' and billing_status != 'stale' and unbilled_item_count &gt; 0"
-                                           decoration-success="billing_status == 'approved' or (billing_status == 'pending' and unbilled_item_count == 0)"
-                                           decoration-secondary="billing_status == 'stale'"/>
-                                </span>
-                                <span class="o_stat_text">Surgical Billing</span>
-                            </div>
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                                title="Pharmacy: needs attention" invisible="pharmacy_status != 'flagged'">
+                            <i class="fa fa-2x fa-exclamation-circle fa-beat-fade text-danger o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
                         </button>
-                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button"
-                                icon="fa-shield" invisible="state == 'draft'">
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                                title="Pharmacy: approved" invisible="pharmacy_status != 'approved'">
+                            <i class="fa fa-2x fa-shield text-success o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
+                        </button>
+                        <button name="action_open_pharmacy_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                                title="Pharmacy: stale, re-lock to re-verify" invisible="pharmacy_status != 'stale'">
+                            <i class="fa fa-2x fa-refresh text-warning o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Pharmacy</span></div>
+                        </button>
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                                title="Billing: checks pending" invisible="state == 'draft' or billing_status != 'pending'">
+                            <i class="fa fa-2x fa-cog fa-spin text-muted o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
+                        </button>
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                                title="Billing: needs attention" invisible="billing_status != 'flagged'">
+                            <i class="fa fa-2x fa-exclamation-circle fa-beat-fade text-danger o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
+                        </button>
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                                title="Billing: approved" invisible="billing_status != 'approved'">
+                            <i class="fa fa-2x fa-shield text-success o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
+                        </button>
+                        <button name="action_open_billing_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                                title="Billing: stale, re-lock to re-verify" invisible="billing_status != 'stale'">
+                            <i class="fa fa-2x fa-refresh text-warning o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Billing</span></div>
+                        </button>
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_pending"
+                                title="Insurance: checks pending" invisible="state == 'draft' or insurance_status != 'pending'">
+                            <i class="fa fa-2x fa-cog fa-spin text-muted o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
+                        </button>
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_flagged"
+                                title="Insurance: needs attention" invisible="insurance_status != 'flagged'">
+                            <i class="fa fa-2x fa-exclamation-circle fa-beat-fade text-danger o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
+                        </button>
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_approved"
+                                title="Insurance: approved" invisible="insurance_status != 'approved'">
+                            <i class="fa fa-2x fa-shield text-success o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
+                        </button>
+                        <button name="action_open_insurance_wizard" type="object" class="oe_stat_button o_cp_stat_stale"
+                                title="Insurance: stale, re-lock to re-verify" invisible="insurance_status != 'stale'">
+                            <i class="fa fa-2x fa-refresh text-warning o_button_icon"/>
+                            <div class="o_stat_info"><span class="o_stat_text">Insurance</span></div>
+                        </button>
+                        <button name="action_view_invoice" type="object" class="oe_stat_button"
+                                icon="fa-money" invisible="not invoice_id">
                             <div class="o_stat_info">
-                                <span class="o_stat_value">
-                                    <field name="insurance_button_text" widget="badge"
-                                           decoration-warning="insurance_status == 'flagged'"
-                                           decoration-success="insurance_status == 'approved' or insurance_status == 'pending'"
-                                           decoration-secondary="insurance_status == 'stale'"/>
-                                </span>
-                                <span class="o_stat_text">Insurance &amp; TPA</span>
+                                <span class="o_stat_value"><field name="invoice_label"/></span>
+                                <span class="o_stat_text">Invoice</span>
                             </div>
                         </button>
                     </div>
                     <widget name="web_ribbon" title="Released" bg_color="text-bg-success"
                             invisible="state != 'released'"/>
+                    <widget name="web_ribbon" title="Allergy Hold" bg_color="text-bg-danger"
+                            invisible="pharmacy_status != 'flagged' or state == 'released'"/>
+                    <widget name="web_ribbon" title="Cleared" bg_color="text-bg-success"
+                            invisible="coordinator_gate_locked or state == 'released'"/>
+
+                    <div class="alert alert-danger d-flex align-items-center o_cp_strip" role="alert"
+                         invisible="top_alert_kind != 'pharmacy'">
+                        <i class="fa fa-exclamation-triangle fa-2x fa-pulse me-3"/>
+                        <h3 class="mb-0"><strong>CRITICAL:</strong> <field name="top_alert_title" class="d-inline"/></h3>
+                        <button name="action_open_alerts_wizard" type="object" class="btn btn-link ms-auto"
+                                string="Details" icon="fa-bell"/>
+                    </div>
+                    <div class="alert alert-warning d-flex align-items-center o_cp_strip" role="alert"
+                         invisible="top_alert_kind != 'billing'">
+                        <i class="fa fa-exclamation-circle fa-2x fa-shake me-3"/>
+                        <h3 class="mb-0"><strong>BILLING:</strong> <field name="top_alert_title" class="d-inline"/></h3>
+                        <button name="action_open_alerts_wizard" type="object" class="btn btn-link ms-auto"
+                                string="Details" icon="fa-bell"/>
+                    </div>
+                    <div class="alert alert-warning d-flex align-items-center o_cp_strip" role="alert"
+                         invisible="top_alert_kind != 'insurance'">
+                        <i class="fa fa-pause-circle fa-2x fa-beat me-3"/>
+                        <h3 class="mb-0"><strong>ON HOLD:</strong> <field name="top_alert_title" class="d-inline"/></h3>
+                        <button name="action_open_alerts_wizard" type="object" class="btn btn-link ms-auto"
+                                string="Details" icon="fa-bell"/>
+                    </div>
 
                     <div class="oe_title">
                         <h1 class="d-flex align-items-center"><i class="fa fa-user-md text-primary me-2"/><field name="name" readonly="1"/></h1>
@@ -197,7 +260,24 @@
                             <group>
                                 <field name="raw_handoff_note" readonly="state == 'released'"
                                        placeholder="Paste the rounds / handoff note..."/>
-                                <field name="ai_draft_summary" readonly="state == 'released'"/>
+                            </group>
+                            <div class="o_cp_summary mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <strong class="me-auto"><i class="fa fa-file-text-o text-primary"/> AI Discharge Summary</strong>
+                                    <a role="button" class="btn btn-link p-0" data-bs-toggle="collapse"
+                                       data-bs-target="#cp_edit_summary" invisible="state == 'released'">
+                                        <i class="fa fa-pencil"/> Edit summary text
+                                    </a>
+                                </div>
+                                <field name="ai_draft_summary_html" nolabel="1" invisible="not ai_draft_summary"/>
+                                <p class="text-muted" invisible="ai_draft_summary">
+                                    Click Generate AI Draft (or Transcribe Voice) to create the summary.
+                                </p>
+                                <div class="collapse mt-2" id="cp_edit_summary">
+                                    <field name="ai_draft_summary" nolabel="1" readonly="state == 'released'"/>
+                                </div>
+                            </div>
+                            <group>
                                 <field name="review_prompts" readonly="1"/>
                             </group>
                             <field name="medication_line_ids" readonly="state == 'released'">

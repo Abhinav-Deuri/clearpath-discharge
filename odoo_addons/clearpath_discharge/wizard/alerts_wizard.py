@@ -22,8 +22,8 @@ class ClearpathAlertsWizard(models.TransientModel):
     def _compute_alerts_html(self):
         for wiz in self:
             cards = [
-                Markup('<div class="alert alert-%s o_cp_alert" role="alert">'
-                       '<div class="o_cp_alert_title"><i class="fa %s"/> %s</div>%s</div>')
+                Markup('<div class="alert alert-%s o_cp_alert d-flex align-items-start" role="alert">'
+                       '<i class="fa fa-2x %s me-3"/><div><div class="o_cp_alert_title">%s</div>%s</div></div>')
                 % (level, icon, title, text)
                 for level, icon, title, text in wiz.discharge_id._alert_items()
             ]

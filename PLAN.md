@@ -251,8 +251,57 @@ The discharge form has 6 notebook tabs plus 3 header sign-off buttons. Pharmacy,
 - Odoo 20 view quirks (`<list>`, `invisible=` expressions, no `attrs`) — caught by steps 1 and 3.
 - Removing the old model methods: only tests and the three form buttons call them.
 
-### Phase 6 as built (+ alerts pop-up)
-- Billing pop-up uses a small transient line model (`clearpath.billing.approval.line`) instead of a writable related One2many: Odoo drops row edits on a related x2many at create time. The Billed column is copied back to the supply lines on **Approve & Resolve** (never bumps the revision).
-- Odoo 20 needs `ir.access.csv` rows for transient models too (3 wizards + the line model, 6 groups each).
-- Verified: 24 Odoo tests, full shell flow through the three pop-ups, all four views compile. Not click-tested in a browser.
-- Inline alert banners moved into a "Review Alerts" pop-up (`clearpath.alerts.wizard`, bell stat button with count). Lock & Run Checks and Simulate Late Edit open it automatically when something needs attention. Status bar hidden once released; icons added to header buttons, title and badges.
+---
+# Phases 7 + 8 (+ summary look) — native Contacts/Invoicing, animated UI, readable summary
+
+## Context
+Phases 1-6 are built, tested (27 Odoo tests, 21 sidecar tests) and pushed. Three requests are open: (7) make `clearpath.patient` a real Odoo Contact and generate a draft invoice from the reconciled supply log; (8) animated, icon-driven state cues; and a readability pass on the AI discharge summary, which currently shows raw markdown (`**Discharge Summary**`, bullets) in a plain text box.
+Findings from exploring the live stack: `account` and `contacts` are already installed in the `clearpath` DB, a Sales journal (INV) and generic chart (50 accounts) exist, so draft invoices can be created. `clearpath_patient` has 2 rows and `name` is NOT NULL, so the field removal needs a migration. No product records exist. `models/res_partner.py` in the working tree is the user's own empty stub (not imported; leave it alone).
+
+## User decisions (confirmed)
+- Animated alerts live **both** places: one slim animated strip on the form (most urgent issue only) + full animated cards in the Review Alerts pop-up.
+- Invoice price comes from a new **Unit Price** column on supply lines (billing fills it in the Billing pop-up); invoice lines are free-text.
+- Smart buttons are icon-first with a **tiny department label** and a hover tooltip.
+
+## Part 1 — Phase 7: delegation inheritance + invoicing
+1. `models/clearpath_patient.py`: `_inherits = {'res.partner': 'partner_id'}`; add `partner_id = Many2one('res.partner', required=True, ondelete='cascade')`; delete `name`; keep `patient_code`, `bed_number`, `allergy_ids`, `discharge_ids`. `insurance_provider` / `policy_number` stay on the patient (clinical/insurance data, not contact data). `_order` stays `patient_code`. Existing code using `patient_id.name` keeps working through delegation.
+2. **Migration** `migrations/20.0.1.1.0/pre-migration.py` (bump manifest version to `20.0.1.1.0`): add `partner_id` column; for every `clearpath_patient` row insert a `res_partner` (name copied) and set `partner_id`; `DROP NOT NULL` / drop the old `name` column so new patients can be created. Without this, `-u` fails on the 2 existing rows (PT-402 and another).
+3. `models/clearpath_discharge.py`: `invoice_id = Many2one('account.move', readonly=True, copy=False)`; `action_generate_invoice()`: group check (billing/admin), requires `billing_status == 'approved'` or `state in ('cleared','released')`, refuses if an invoice exists, creates `account.move` (`move_type='out_invoice'`, `partner_id=patient_id.partner_id`, `invoice_origin=name`, `ref` = patient code + revision) with one `invoice_line_ids` per supply line (`name=item_name`, `quantity=billed_qty` = the reconciled quantity, `price_unit=unit price`), links `invoice_id`, posts chatter, returns a notification + `soft_reload`. Lines with quantity 0 are skipped. The invoice stays **draft** (a human posts it in Invoicing; consistent with HITL).
+4. `models/clearpath_lines.py` + billing pop-up: add `price_unit` Float to `clearpath.supply.line` (edit does NOT bump the revision, like `billed_qty`); add the column to `clearpath.billing.approval.line` and copy it back in `_apply_billed_quantities`. Add Unit Price to the Clinical Draft supply list? No: billing-only.
+5. `__manifest__.py`: `depends` += `contacts`, `account`; `security/clearpath_security.xml`: `group_clearpath_billing` and `group_clearpath_admin` `implied_ids` += `account.group_account_invoice` so billing users may create invoices.
+6. Views: header button **Generate Final Invoice** (`icon fa-file-text-o`, visible when `(billing_status == 'approved' or state == 'cleared') and not invoice_id`); smart button **Invoice** (`fa-money`, shows invoice number/state, `invisible="not invoice_id"`) opening the `account.move` via `action_view_invoice` (`res_model='account.move'`, `res_id`, form). Patient form: show the delegated contact fields (email, phone, mobile) so the Contacts integration is visible; patient list gets an email column. Contacts app shows the same partner.
+7. `data/demo_patient_pt402.xml`: no change needed (`name` is passed to the delegated create, Odoo creates the partner). Existing DB record is covered by the migration.
+8. Tests: new patient creates a partner; migration-style check that `patient.partner_id.name == patient.name`; invoice creation (lines, quantity from billed_qty, price, partner, draft); blocked before billing approval and for non-billing users; second click refused; `price_unit` edit after lock keeps the revision.
+
+## Part 2 — Phase 8: animated visual cues (`views/clearpath_discharge_views.xml`, `static/src/scss/clearpath_wizards.scss`)
+1. **Ribbons**: red `Allergy Hold` (`bg_color="text-bg-danger"`, `invisible="pharmacy_status != 'flagged'"`), green `Cleared` (`text-bg-success`, `invisible="coordinator_gate_locked or state == 'released'"`, so it does not overlap the existing Released ribbon). Ribbons are mutually exclusive.
+2. **Animated strip + pop-up cards**: on the form, one slim `alert` strip chosen by priority (pharmacy conflict > billing discrepancy > insurance hold) with `<i class="fa fa-exclamation-triangle fa-2x fa-pulse me-3"/>` and `<h3 class="mb-0"><strong>CRITICAL:</strong> Penicillin Allergy Conflict</h3>`-style one-liner (text from `pharmacy_summary`-derived conflict). Billing uses `fa-shake`, insurance uses `fa-beat`. Same animated icons on the cards inside the Review Alerts pop-up (`_alert_items()` icon classes extended). Clicking the strip opens the Review Alerts pop-up.
+3. **Conditional icon smart buttons**: for Pharmacy, Billing, Insurance, four `oe_stat_button`s each, switched by `invisible`: pending `fa-cog fa-spin text-muted`; flagged `fa-exclamation-circle fa-beat-fade text-danger`; approved `fa-shield text-success`; plus a fourth `stale` state (`fa-refresh text-warning`) because the brief's three states would leave a stale record blank. All 12 call the existing `action_open_*_wizard`. Each has a tiny `o_stat_text` label and `title` tooltip. Hidden in draft. Replaces the current badge-text buttons (the count/label computes stay for the tooltips and tests).
+4. **Animation safety**: the bundled Font Awesome may be 4.7, which has `fa-spin`/`fa-pulse` but not `fa-beat`, `fa-beat-fade`, `fa-shake` (the Odoo image's CSS could not be inspected). Add small `@keyframes` polyfills for those three classes in the scss (harmless if FA6 already defines them) and a `prefers-reduced-motion` rule that disables all animation.
+5. **Pop-up behaviour check**: `action_open_pharmacy_wizard` / `billing` / `insurance` already return `type: ir.actions.act_window`, `target: new` (covered by `test_18`); keep that test and add the same assertion for the new states.
+
+## Part 3 — Readable AI discharge summary
+Problem: `ai_draft_summary` is stored as markdown and shown raw in a plain `Text` field (see the pasted example).
+1. New renderer `summary_to_html()` in `models/clearpath_discharge.py` (next to `md_to_html`, which stays as the fallback): turns a heading plus `- **Label**: value` bullets into a card: title row with a document icon, then one row per label with an icon, the label in small caps and the value beside it (table layout with inline styles, so it also renders in the wkhtmltopdf PDF). Icons by label: Patient `fa-user`, Procedure `fa-scissors`, Hospital Course `fa-heartbeat`, Incisions `fa-bandage`-style `fa-medkit`, Plan `fa-home`, Medications `fa-medkit`/pills, Allergies `fa-exclamation-circle` (red text), Follow-up `fa-calendar`. The **Items for clinician review** row becomes an amber callout with a warning icon. Unknown labels use a neutral dot; text without bullets falls back to `md_to_html`. Dark-theme safe (no hard-coded backgrounds except tinted callouts with alpha).
+2. Wire it: `_compute_ai_draft_summary_html` calls it (used by the form, the pharmacy pop-up and the PDF audit body).
+3. Form (Clinical Draft page): show the rendered card by default, with the raw text in a collapsed "Edit summary text" area so doctors can still edit (edits still trigger the Stale-Write Guard). The note and review prompts keep their current fields.
+4. Sidecar prompt (`ai_llm_client.py`): keep the strict `- **Label**: value` bullet format and the fixed label set so the renderer's icons match; update `_mock_draft` to the same labels. No schema change.
+5. Tests: renderer output for the pasted sample (labels, icon classes, review callout, allergy red), fallback for plain text, escaping of `<script>` in values.
+
+## Verification
+1. `-u clearpath_discharge` on the live DB (migration runs on the 2 existing patients) with no errors; Odoo HTTP 200 after restart.
+2. Odoo tests in a scratch DB (`MSYS_NO_PATHCONV=1 ... --test-enable --test-tags /clearpath_discharge`, drop it after) all green, sidecar `pytest` green.
+3. Odoo shell: patient -> partner link; PT-402 keeps its name; full flow lock -> 3 approvals -> Generate Final Invoice creates a **draft** `account.move` with the right partner, lines and totals; `invoice_id` set; smart-button action opens the move; PDF still renders (summary card + insurance section).
+4. Views: `get_view` compiles for form, wizards, patient; check ribbons, strip, 12 conditional buttons and the summary card in the arch.
+5. Browser pass on PT-402 if the Claude Chrome extension is connected (it has not been); otherwise state that the animations and card look are unverified and list what to look at.
+
+## Risks
+- Delegation inheritance migration on existing rows (NOT NULL `name`, FK `partner_id`): handled by the pre-migration script; take a `pg_dump` of the `clearpath` DB first.
+- Invoice creation needs access to `account.move`: depends on the implied `account.group_account_invoice`; admin passes.
+- Animation classes missing in the bundled Font Awesome: polyfilled.
+- The Phase 7 spec says "billing_status approved or state cleared"; both are honoured, but an invoice before insurance/pharmacy sign-off is possible by design.
+
+### Phases 7 + 8 as built
+- `clearpath.patient` delegates to `res.partner` (`_inherits`); pre-migration `20.0.1.1.0` creates a Contact for each existing patient and drops the old `name` column (dry-run on a restored copy of the live DB first). `price_unit` on supply lines (editable in the Billing pop-up, never bumps the revision); `action_generate_invoice` creates a DRAFT `account.move` from billed quantities; Invoice smart button.
+- Animated cues: Allergy Hold / Cleared ribbons, animated strip, 4-state icon buttons per department; `fa-beat`, `fa-beat-fade`, `fa-shake` polyfilled in scss; reduced-motion respected.
+- AI summary renders as a card (`summary_to_html`), `---` rules stripped, sidecar prompt/mock use `- **Label**: value`.

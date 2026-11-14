@@ -123,3 +123,40 @@
     font-size: .78rem;
     font-weight: 600;
 }
+
+// ---- Phase 8: animated state cues. Font Awesome 4.x has fa-spin / fa-pulse only, so the
+// FA6-style fa-beat / fa-beat-fade / fa-shake are defined here (harmless if FA6 also defines them).
+@keyframes cp-beat { 0%, 90% { transform: scale(1); } 45% { transform: scale(1.25); } }
+@keyframes cp-beat-fade { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+@keyframes cp-shake {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(-12deg); } 30% { transform: rotate(10deg); }
+    45% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } 75% { transform: rotate(-3deg); }
+}
+.fa-beat { animation: cp-beat 1s ease-in-out infinite; }
+.fa-beat-fade { animation: cp-beat-fade 1.2s ease-in-out infinite; }
+.fa-shake { animation: cp-shake 1.4s ease-in-out infinite; transform-origin: 50% 20%; }
+
+.o_cp_strip {
+    border: 0;
+    border-left: 6px solid;
+    border-radius: 12px;
+    &.alert-danger { border-left-color: var(--bs-danger); }
+    &.alert-warning { border-left-color: var(--bs-warning); }
+}
+
+.o_form_view .oe_button_box .oe_stat_button {
+    &.o_cp_stat_flagged { border-color: var(--bs-danger); }
+    &.o_cp_stat_approved { border-color: var(--bs-success); }
+    .o_button_icon { display: inline-block; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fa-spin, .fa-pulse, .fa-beat, .fa-beat-fade, .fa-shake { animation: none !important; }
+}
+
+// Released packets: hide the status bar. The view also sets invisible="state == 'released'";
+// this is a belt-and-braces rule for the rendered arrows.
+.o_clearpath_discharge_form .o_statusbar_status:has(.o_arrow_button_current[data-value="released"]) {
+    display: none !important;
+}

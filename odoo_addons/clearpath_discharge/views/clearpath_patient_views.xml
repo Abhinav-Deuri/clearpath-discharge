@@ -12,6 +12,8 @@
             <list string="Patients">
                 <field name="patient_code"/>
                 <field name="name"/>
+                <field name="email"/>
+                <field name="phone"/>
                 <field name="bed_number"/>
             </list>
         </field>
@@ -27,6 +29,8 @@
                         <group>
                             <field name="name"/>
                             <field name="patient_code"/>
+                            <field name="email" widget="email"/>
+                            <field name="phone" widget="phone"/>
                         </group>
                         <group>
                             <field name="bed_number"/>

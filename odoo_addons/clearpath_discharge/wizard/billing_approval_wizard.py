@@ -13,6 +13,7 @@ class ClearpathBillingApprovalLine(models.TransientModel):
     item_name = fields.Char()
     surgical_qty_used = fields.Integer(string="Used in Surgery")
     billed_qty = fields.Integer(string="Billed")
+    price_unit = fields.Float(string="Unit Price", digits='Product Price')
     discrepancy_qty = fields.Integer(string="Unbilled Qty", compute='_compute_discrepancy')
     is_flagged = fields.Boolean(compute='_compute_discrepancy')
 
@@ -45,7 +46,8 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
     def _line_commands(self, discharge_id):
         supplies = self.env['clearpath.discharge'].browse(discharge_id).supply_line_ids
         return [(0, 0, {'supply_line_id': s.id, 'item_name': s.item_name,
-                        'surgical_qty_used': s.surgical_qty_used, 'billed_qty': s.billed_qty})
+                        'surgical_qty_used': s.surgical_qty_used, 'billed_qty': s.billed_qty,
+                        'price_unit': s.price_unit})
                 for s in supplies]
 
     @api.model
@@ -89,11 +91,18 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
 
     # ------------------------------------------------------------------ action
     def _apply_billed_quantities(self):
-        """Copy the edited Billed column back to the real supply lines (never bumps the revision)."""
+        """Copy the edited Billed / Unit Price columns back to the supply lines (never bumps the revision)."""
         for line in self.line_ids:
             supply = line.supply_line_id
-            if supply and supply.billed_qty != line.billed_qty:
-                supply.write({'billed_qty': max(line.billed_qty, 0)})
+            if not supply:
+                continue
+            vals = {}
+            if supply.billed_qty != line.billed_qty:
+                vals['billed_qty'] = max(line.billed_qty, 0)
+            if supply.price_unit != line.price_unit:
+                vals['price_unit'] = max(line.price_unit, 0.0)
+            if vals:
+                supply.write(vals)
 
     def action_approve(self):
         self.ensure_one()

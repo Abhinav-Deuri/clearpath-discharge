@@ -1,8 +1,8 @@
 {
     'name': "ClearPath Discharge",
-    'version': '20.0.1.0.0',
+    'version': '20.0.1.1.0',
     'summary': "AI-assisted surgical discharge with pharmacy and billing sign-off",
-    'depends': ['base', 'mail'],
+    'depends': ['base', 'mail', 'contacts', 'account'],
     'application': True,
     'installable': True,
     'author': 'ClearPath',

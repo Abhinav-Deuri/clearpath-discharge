@@ -32,6 +32,7 @@
             <field name="item_name">Hemostatic Gauze Pad</field>
             <field name="surgical_qty_used">4</field>
             <field name="billed_qty">2</field>
+            <field name="price_unit">12.5</field>
         </record>
 
         <record id="demo_supply_stapler" model="clearpath.supply.line">
@@ -39,6 +40,7 @@
             <field name="item_name">Skin Stapler</field>
             <field name="surgical_qty_used">1</field>
             <field name="billed_qty">0</field>
+            <field name="price_unit">85</field>
         </record>
     </data>
 </odoo>

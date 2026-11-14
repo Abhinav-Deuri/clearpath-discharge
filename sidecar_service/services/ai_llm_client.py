@@ -15,9 +15,11 @@ _SYSTEM_PROMPT = (
     "condition or procedure as described in the handoff note; do not assume any particular procedure. "
     "Use ONLY facts present in the provided data (handoff note, medications, allergies, supplies). "
     "Never invent vitals, dates, doses, test results, or instructions that are not in the data. "
-    "Omit any section with nothing documented; do not write placeholders. Choose section headings that "
-    "fit this condition. Keep it under 250 words, in plain markdown: short headings and bullets, no "
-    "tables, no horizontal rules, no empty bullets. If a medication seems to conflict with a documented "
+    "Omit any item with nothing documented; do not write placeholders. Format strictly as: a first line "
+    "**Discharge Summary**, then one bullet per item written as '- **Label**: value'. Use these labels "
+    "when documented: Patient, Procedure, Hospital Course, Incisions, Plan, Medications, Allergies, "
+    "Items for clinician review, Follow-up; add other labels only if this condition needs them. Keep it "
+    "under 250 words. No tables, no horizontal rules (---), no nested bullets, no empty bullets. If a medication seems to conflict with a documented "
     "allergy, list it under 'Items for clinician review' and do NOT resolve, approve or override it; "
     "a human will decide. Also give 3 to 5 short review questions specific to this case. "
     "Also list proposed_medications: only medications explicitly stated in the handoff note, "
@@ -50,26 +52,22 @@ def extract_medications(note: str) -> list[dict]:
 def _mock_draft(context: dict) -> tuple[str, list[str], list[dict]]:
     note = context.get("raw_handoff_note", "")
     meds = context.get("medications", [])
-    med_lines = (
-        "\n".join(
-            f"- {m.get('drug_name', '?')} {m.get('dosage', '')} {m.get('frequency', '')}".rstrip()
-            for m in meds
-        )
-        or "- None listed"
-    )
+    med_text = "; ".join(
+        f"{m.get('drug_name', '?')} {m.get('dosage', '')} {m.get('frequency', '')}".strip() for m in meds
+    ) or "None listed"
     allergies = ", ".join(
         f"{a.get('allergen', '?')} ({a.get('reaction', '?')})"
         for a in context.get("allergies", [])
     ) or "None documented"
     first = note.strip().split(".")[0][:120] if note.strip() else "See handoff note"
     summary = (
-        f"## Discharge Summary - {context.get('patient_code', 'PT-???')} "
-        f"(Bed {context.get('bed_number', '?')})\n"
-        f"**Condition / procedure:** {first}\n"
-        f"**Documented allergies:** {allergies}\n"
-        f"**Course:** {note.strip()[:400]}\n"
-        f"**Discharge medications (proposed):**\n{med_lines}\n"
-        "**Follow-up:** per clinician; see handoff note."
+        "**Discharge Summary**\n"
+        f"- **Patient**: {context.get('patient_code', 'PT-???')}, Bed {context.get('bed_number', '?')}\n"
+        f"- **Procedure**: {first}\n"
+        f"- **Hospital Course**: {note.strip()[:400]}\n"
+        f"- **Medications**: {med_text}\n"
+        f"- **Allergies**: {allergies}\n"
+        "- **Follow-up**: per clinician; see handoff note."
     )
     prompts = [
         "Confirm each proposed discharge medication is compatible with the documented allergies.",

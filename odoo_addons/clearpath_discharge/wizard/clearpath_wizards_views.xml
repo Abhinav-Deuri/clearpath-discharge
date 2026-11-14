@@ -130,7 +130,7 @@
                     <div class="alert alert-warning o_cp_alert" role="alert"
                          invisible="total_unbilled == 0 or status == 'approved'">
                         <div class="o_cp_alert_title"><i class="fa fa-exclamation-triangle"/> Unbilled supplies</div>
-                        Used in surgery but not billed yet. Enter the correct number in the <b>Billed</b> column.
+                        Used in surgery but not billed yet. Enter the correct number in the <b>Billed</b> column, and the <b>Unit Price</b> for the invoice.
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert"
                          invisible="total_unbilled != 0 or status != 'pending'">
@@ -176,6 +176,7 @@
                                 <field name="item_name" readonly="1" force_save="1"/>
                                 <field name="surgical_qty_used" readonly="1" force_save="1"/>
                                 <field name="billed_qty" readonly="parent.status == 'approved' or parent.state == 'released'"/>
+                                <field name="price_unit" readonly="parent.state == 'released'"/>
                                 <field name="discrepancy_qty"/>
                                 <field name="is_flagged" column_invisible="True"/>
                             </list>

@@ -3,11 +3,14 @@ from odoo.exceptions import ValidationError
 
 
 class ClearpathPatient(models.Model):
+    """A patient IS an Odoo Contact: name, email, phone, address live on res.partner (delegation)."""
     _name = 'clearpath.patient'
     _description = 'ClearPath Patient'
+    _inherits = {'res.partner': 'partner_id'}
     _order = 'patient_code'
 
-    name = fields.Char(string="Patient Name", required=True)
+    partner_id = fields.Many2one(
+        'res.partner', string="Contact Record", required=True, ondelete='cascade', index=True)
     patient_code = fields.Char(string="Patient Code", required=True, copy=False)
     bed_number = fields.Char(string="Bed")
     insurance_provider = fields.Char(string="TPA / Insurance Provider")

@@ -52,6 +52,8 @@ def md_to_html(text):
 
     for raw in (text or '').splitlines():
         line = raw.strip()
+        if _RULE_RE.match(line):
+            continue
         if line.startswith('|'):
             flush_bullets()
             cells = [c.strip() for c in line.strip('|').split('|')]
@@ -73,6 +75,98 @@ def md_to_html(text):
     flush_table()
     flush_bullets()
     return Markup(''.join(out))
+
+_RULE_RE = re.compile(r'^\s*([-*_]\s*){3,}$')  # markdown horizontal rules ("---")
+_ROW_RE = re.compile(r'^(?:[-*\u2022]\s+)?\*\*(.+?)\*\*\s*:?\s*(.*)$')
+_SUB_BULLET_RE = re.compile(r'^\s*[-*\u2022]\s+(?!\*\*)(.*)$')
+_HEADING_RE = re.compile(r'^#{1,6}\s+(.*)$')
+_SUMMARY_ICONS = (
+    ('patient', 'fa-user'), ('procedure', 'fa-scissors'), ('condition', 'fa-scissors'),
+    ('course', 'fa-heartbeat'), ('incision', 'fa-medkit'), ('plan', 'fa-home'),
+    ('medication', 'fa-flask'), ('allerg', 'fa-exclamation-circle'), ('follow', 'fa-calendar'),
+)
+
+
+def clean_summary_text(text):
+    """Drop markdown horizontal rules (---) and blank runs from AI output."""
+    lines = [ln for ln in (text or '').splitlines() if not _RULE_RE.match(ln)]
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+
+
+def _md_inline(text):
+    return Markup(re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', str(escape(text))))
+
+
+def summary_to_html(text):
+    """Discharge summary -> readable card (icon + small-caps label + value per row).
+
+    Tables and inline styles only, so the same HTML renders in the form and in the wkhtmltopdf PDF.
+    Text that is not `- **Label**: value` shaped falls back to md_to_html.
+    """
+    lines = [ln.rstrip() for ln in clean_summary_text(text).splitlines() if ln.strip()]
+    if sum(1 for ln in lines if _ROW_RE.match(ln.strip()) and _ROW_RE.match(ln.strip()).group(2)) < 2:
+        return md_to_html(clean_summary_text(text))
+
+    title, rows = None, []  # rows: dict(label, value, bullets) | dict(heading=...) | dict(plain=...)
+    for idx, raw in enumerate(lines):
+        line = raw.strip()
+        row = _ROW_RE.match(line)
+        heading = _HEADING_RE.match(line)
+        sub_bullet = _SUB_BULLET_RE.match(raw)
+        bare = not row and not heading and not sub_bullet and len(line) <= 60 and not line.endswith(('.', ':'))
+        if title is None and idx == 0 and (heading or bare or (row and not row.group(2))):
+            title = (heading.group(1) if heading else row.group(1) if row else line).strip().rstrip(':')
+        elif row:
+            rows.append({'label': row.group(1).strip().rstrip(':'), 'value': row.group(2).strip(), 'bullets': []})
+        elif heading:
+            rows.append({'heading': heading.group(1).strip().rstrip(':')})
+        elif sub_bullet and rows and 'label' in rows[-1]:
+            rows[-1]['bullets'].append(sub_bullet.group(1).strip())
+        else:
+            rows.append({'plain': re.sub(r'^[-*\u2022]\s+', '', line)})
+
+    td_icon = ('<td style="width:34px; padding:9px 0 9px 14px; vertical-align:top; text-align:center; '
+               'color:%s;"><i class="fa %s"/></td>')
+    border = 'border-top:1px solid rgba(128,128,128,.25);'
+    body = []
+    for r in rows:
+        if 'heading' in r:
+            body.append('<tr style="%s"><td colspan="3" style="padding:9px 14px 3px; font-weight:700; '
+                        'font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:#6b7280;">%s</td></tr>'
+                        % (border, escape(r['heading'])))
+            continue
+        if 'plain' in r:
+            body.append('<tr style="%s"><td colspan="3" style="padding:8px 14px;">%s</td></tr>'
+                        % (border, _md_inline(r['plain'])))
+            continue
+        label, key = r['label'], r['label'].lower()
+        value = str(_md_inline(r['value'])) if r['value'] else ''
+        if r['bullets']:
+            value += '<ul style="margin:2px 0 0 18px; padding:0;">%s</ul>' % ''.join(
+                '<li>%s</li>' % _md_inline(b) for b in r['bullets'])
+        if 'review' in key:
+            body.append(
+                '<tr style="%s"><td colspan="3" style="padding:10px 14px;"><div style="border-left:4px solid #f59e0b; '
+                'background:rgba(245,158,11,.14); border-radius:6px; padding:8px 12px;"><b>'
+                '<i class="fa fa-exclamation-triangle" style="color:#d97706;"/> %s</b><div style="margin-top:3px;">%s'
+                '</div></div></td></tr>' % (border, escape(label), value))
+            continue
+        icon = next((ic for k, ic in _SUMMARY_ICONS if k in key), 'fa-angle-right')
+        alert = 'allerg' in key
+        body.append(
+            '<tr style="%s">%s<td style="width:140px; padding:9px 10px; vertical-align:top; font-size:11px; '
+            'font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280;">%s</td>'
+            '<td style="padding:9px 14px 9px 0; vertical-align:top;%s">%s</td></tr>'
+            % (border, td_icon % ('#dc3545' if alert else '#0d6efd', icon), escape(label),
+               ' color:#dc3545; font-weight:600;' if alert else '', value))
+
+    head = ''
+    if title:
+        head = ('<div style="padding:10px 14px; font-weight:700; font-size:15px; background:rgba(13,110,253,.10);">'
+                '<i class="fa fa-file-text-o" style="color:#0d6efd;"/> %s</div>' % escape(title))
+    return Markup(
+        '<div style="border:1px solid rgba(128,128,128,.35); border-radius:10px; overflow:hidden; font-size:13px;">'
+        '%s<table style="width:100%%; border-collapse:collapse;">%s</table></div>' % (head, ''.join(body)))
 
 
 class ClearpathDischarge(models.Model):
@@ -163,7 +257,15 @@ class ClearpathDischarge(models.Model):
     pharmacy_button_text = fields.Char(compute='_compute_stat_buttons')
     billing_button_text = fields.Char(compute='_compute_stat_buttons')
     insurance_button_text = fields.Char(compute='_compute_stat_buttons')
+
+    # --- Phase 7: native Invoicing
+    invoice_id = fields.Many2one('account.move', string="Generated Invoice", readonly=True, copy=False)
+    invoice_label = fields.Char(compute='_compute_invoice_label')
     alert_count = fields.Integer(compute='_compute_alert_count')
+    top_alert_kind = fields.Selection(
+        [('pharmacy', 'Pharmacy'), ('billing', 'Billing'), ('insurance', 'Insurance')],
+        compute='_compute_top_alert')
+    top_alert_title = fields.Char(compute='_compute_top_alert')
 
     # ------------------------------------------------------------------ helpers
     @api.depends('tpa_claim_document')
@@ -174,7 +276,7 @@ class ClearpathDischarge(models.Model):
     @api.depends('ai_draft_summary')
     def _compute_ai_draft_summary_html(self):
         for rec in self:
-            rec.ai_draft_summary_html = md_to_html(rec.ai_draft_summary)
+            rec.ai_draft_summary_html = summary_to_html(rec.ai_draft_summary)
 
     @api.depends(
         'state', 'revision_id', 'revision_hash', 'sidecar_snapshot_id', 'ai_draft_summary',
@@ -225,15 +327,15 @@ class ClearpathDischarge(models.Model):
         self.ensure_one()
         items = []
         if self.pharmacy_status == 'flagged':
-            items.append(('danger', 'fa-exclamation-triangle', "Pharmacy safety conflict",
+            items.append(('danger', 'fa-exclamation-triangle fa-pulse', "Pharmacy safety conflict",
                           "%s Open the Pharmacy button for details. Change the medication to create a "
                           "new revision, then re-run checks." % (self.pharmacy_summary or "")))
         if self.billing_status == 'flagged':
-            items.append(('warning', 'fa-calculator', "Surgical billing discrepancy",
+            items.append(('warning', 'fa-exclamation-circle fa-shake', "Surgical billing discrepancy",
                           "%s Open the Billing button, correct the billed quantities, then sign off."
                           % (self.billing_summary or "")))
         if self.insurance_status == 'flagged':
-            items.append(('warning', 'fa-pause-circle', "TPA insurance claim on hold",
+            items.append(('warning', 'fa-pause-circle fa-beat', "TPA insurance claim on hold",
                           "Open the Insurance button. The claim is released for admin sign-off only after "
                           "every discrepancy is reconciled."))
         if 'stale' in (self.pharmacy_status, self.billing_status, self.insurance_status):
@@ -241,7 +343,7 @@ class ClearpathDischarge(models.Model):
                           "The record was edited after locking. The previous checks and sign-offs are "
                           "invalid. Lock this revision again to re-verify."))
         if self.state == 'cleared' and not self.coordinator_gate_locked:
-            items.append(('success', 'fa-unlock-alt', "Release gate open",
+            items.append(('success', 'fa-unlock-alt fa-beat', "Release gate open",
                           "Pharmacy, Billing and Insurance all approved this revision."))
         if self.token_savings_summary:
             items.append(('info', 'fa-bolt', "Token savings before AI call", self.token_savings_summary))
@@ -253,6 +355,27 @@ class ClearpathDischarge(models.Model):
         for rec in self:
             rec.alert_count = len(rec._alert_items())
 
+    @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
+                 'medication_line_ids.is_flagged', 'medication_line_ids.conflict_reason',
+                 'supply_line_ids.discrepancy_qty', 'patient_id.allergy_ids.allergen')
+    def _compute_top_alert(self):
+        for rec in self:
+            kind, title = False, False
+            if rec.pharmacy_status == 'flagged':
+                reasons = " ".join(rec.medication_line_ids.filtered('is_flagged').mapped('conflict_reason')
+                                   ).lower()
+                allergens = rec.patient_id.allergy_ids.mapped('allergen')
+                hit = [a for a in allergens if a and a.lower() in reasons] or [
+                    a.allergen for a in rec.patient_id.allergy_ids if a.criticality == 'high'][:1]
+                kind = 'pharmacy'
+                title = "%s Allergy Conflict" % (", ".join(hit) if hit else "Drug")
+            elif rec.billing_status == 'flagged':
+                n = len(rec.supply_line_ids.filtered(lambda s: s.discrepancy_qty > 0))
+                kind, title = 'billing', "%d unbilled surgical item%s" % (n, '' if n == 1 else 's')
+            elif rec.insurance_status == 'flagged':
+                kind, title = 'insurance', "TPA insurance claim on hold"
+            rec.top_alert_kind, rec.top_alert_title = kind, title
+
     def action_open_alerts_wizard(self):
         return self._open_wizard('clearpath_discharge.alerts_wizard_action', size='medium')
 
@@ -260,6 +383,13 @@ class ClearpathDischarge(models.Model):
         """After lock / late edit: pop the alerts up (the form refreshes when it closes)."""
         self.ensure_one()
         return self.action_open_alerts_wizard() if self._alert_items() else self._soft_reload()
+
+    @api.depends('invoice_id.name', 'invoice_id.state')
+    def _compute_invoice_label(self):
+        for rec in self:
+            move = rec.invoice_id
+            rec.invoice_label = (move.name if move and move.name and move.name != '/' else "Draft Invoice") \
+                if move else False
 
     @api.depends('patient_id.patient_code')
     def _compute_name(self):
@@ -421,13 +551,17 @@ class ClearpathDischarge(models.Model):
         except requests.RequestException:
             raise UserError("Cannot reach the sidecar to clear its state; start it and try again.")
         ctx = self.sudo().with_context(clearpath_skip_guard=True)  # admin-only action
+        if ctx.invoice_id and ctx.invoice_id.state == 'draft':
+            ctx.invoice_id.unlink()
         ctx.medication_line_ids.unlink()
         ctx.supply_line_ids.unlink()
         ctx.env['clearpath.medication.line'].create(
             {'discharge_id': self.id, 'drug_name': 'Amoxicillin', 'dosage': '500mg', 'frequency': 'TID'})
         ctx.env['clearpath.supply.line'].create([
-            {'discharge_id': self.id, 'item_name': 'Hemostatic Gauze Pad', 'surgical_qty_used': 4, 'billed_qty': 2},
-            {'discharge_id': self.id, 'item_name': 'Skin Stapler', 'surgical_qty_used': 1, 'billed_qty': 0},
+            {'discharge_id': self.id, 'item_name': 'Hemostatic Gauze Pad', 'surgical_qty_used': 4, 'billed_qty': 2,
+             'price_unit': 12.5},
+            {'discharge_id': self.id, 'item_name': 'Skin Stapler', 'surgical_qty_used': 1, 'billed_qty': 0,
+             'price_unit': 85.0},
         ])
         ctx.write({
             'state': 'draft', 'revision_id': 1, 'revision_hash': False, 'sidecar_snapshot_id': False,
@@ -499,7 +633,7 @@ class ClearpathDischarge(models.Model):
         data = self._post_sidecar('/api/v1/draft', payload, timeout=60)
         stats = data['token_stats']
         self.write({
-            'ai_draft_summary': data['ai_draft_summary'],
+            'ai_draft_summary': clean_summary_text(data['ai_draft_summary']),
             'review_prompts': "\n".join("- " + p for p in data['review_prompts']),
             'token_savings_summary': (
                 "Raw Odoo payload: {before_tokens:,} tokens -> Pruned payload: {after_tokens:,} tokens "
@@ -648,7 +782,7 @@ class ClearpathDischarge(models.Model):
         stats = data['token_stats']
         self.write({
             'raw_handoff_note': data['transcribed_text'],
-            'ai_draft_summary': data['ai_draft_summary'],
+            'ai_draft_summary': clean_summary_text(data['ai_draft_summary']),
             'review_prompts': "\n".join("- " + p for p in data['review_prompts']),
             'token_savings_summary': (
                 "Raw Odoo payload: {before_tokens:,} tokens -> Pruned payload: {after_tokens:,} tokens "
@@ -729,6 +863,39 @@ class ClearpathDischarge(models.Model):
 
     def action_open_insurance_wizard(self):
         return self._open_wizard('clearpath_discharge.insurance_approval_wizard_action')
+
+    # ------------------------------------------------ Phase 7: final invoice (Odoo Invoicing)
+    def action_generate_invoice(self):
+        """Turn the reconciled supply log into a DRAFT customer invoice for the patient's Contact."""
+        self.ensure_one()
+        self._require_any_group([GROUP_BILLING, GROUP_ADMIN], "a Billing Officer or Hospital Admin")
+        if self.invoice_id:
+            raise UserError("An invoice already exists for this discharge (%s)." % self.invoice_label)
+        if not (self.billing_status == 'approved' or self.state in ('cleared', 'released')):
+            raise UserError("Billing must be approved before the final invoice can be generated.")
+        lines = self.supply_line_ids.filtered(lambda s: s.billed_qty > 0)
+        if not lines:
+            raise UserError("There are no billed supply items to invoice.")
+        move = self.env['account.move'].create({
+            'move_type': 'out_invoice',
+            'partner_id': self.patient_id.partner_id.id,
+            'invoice_origin': self.name,
+            'ref': "%s Rev %d" % (self.patient_id.patient_code, self.revision_id),
+            'invoice_line_ids': [(0, 0, {
+                'name': line.item_name,
+                'quantity': line.billed_qty,  # the reconciled (billed) quantity
+                'price_unit': line.price_unit,
+            }) for line in lines],
+        })
+        self.invoice_id = move
+        self.message_post(body="Draft invoice created from the reconciled supply log (%d line(s))." % len(lines))
+        return self._toast("Invoice created",
+                           "A draft invoice for %s is ready in Invoicing." % self.patient_id.name)
+
+    def action_view_invoice(self):
+        self.ensure_one()
+        return {'type': 'ir.actions.act_window', 'res_model': 'account.move',
+                'res_id': self.invoice_id.id, 'view_mode': 'form', 'target': 'current'}
 
     # ----------------------------------------- HITL gate #2 - coordinator release
     def action_coordinator_release(self):

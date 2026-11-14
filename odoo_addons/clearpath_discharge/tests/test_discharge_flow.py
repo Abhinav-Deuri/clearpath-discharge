@@ -420,5 +420,72 @@ class TestDischargeFlow(TransactionCase):
         arch = self.env['clearpath.discharge'].get_view(
             self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
         self.assertIn("state == 'released'", arch)
-        self.assertNotIn('alert-danger', arch)  # inline banners moved to the pop-up
+        self.assertNotIn('name="pharmacy_summary"', arch)  # wordy banners moved to the pop-up
+
+    # ------------------------------------------------------------ Phase 7: Contacts + Invoicing
+    def test_26_patient_is_a_contact(self):
+        self.assertTrue(self.patient.partner_id)
+        self.assertEqual(self.patient.partner_id.name, 'Test Patient')
+        jane = self.env['clearpath.patient'].create(
+            {'name': 'Jane Roe', 'patient_code': 'PT-T9', 'email': 'jane@example.com'})
+        self.assertEqual(jane.partner_id.email, 'jane@example.com')
+        self.assertEqual(jane.partner_id.name, 'Jane Roe')
+
+    def test_27_invoice_from_billed_supplies(self):
+        d = self._locked()
+        self._reconcile_and_sign_all_but_insurance(d)
+        for line in d.supply_line_ids:
+            line.price_unit = 10.0  # billing sets prices: never bumps the revision
+        self.assertEqual(d.revision_id, 2)
+        d.with_user(self.billing).action_generate_invoice()
+        move = d.invoice_id
+        self.assertEqual((move.move_type, move.state), ('out_invoice', 'draft'))
+        self.assertEqual(move.partner_id, self.patient.partner_id)
+        self.assertEqual(sorted(move.invoice_line_ids.mapped('quantity')), [1.0, 4.0])
+        self.assertEqual(move.amount_untaxed, 50.0)
+        self.assertEqual(d.action_view_invoice()['res_model'], 'account.move')
+        with self.assertRaises(UserError):
+            d.action_generate_invoice()  # one invoice per discharge
+
+    def test_28_invoice_blocked_before_billing_and_for_other_roles(self):
+        d = self._locked()
+        with self.assertRaises(UserError):
+            d.action_generate_invoice()
+        self._reconcile_and_sign_all_but_insurance(d)
+        with self.assertRaises(UserError):
+            d.with_user(self.doctor).action_generate_invoice()
+
+    # ------------------------------------------------------------ Phase 8 + summary card
+    def test_29_summary_card_is_readable(self):
+        from odoo.addons.clearpath_discharge.models.clearpath_discharge import (
+            clean_summary_text, summary_to_html)
+        sample = (
+            "**Discharge Summary**\n- **Patient**: PT-402, Bed 402\n"
+            "- **Allergies**: Penicillin - anaphylaxis (high)\n"
+            "- **Items for clinician review**: Amoxicillin <script>x</script>\n---\n"
+            "- **Follow-up**: Surgical clinic in 2 weeks")
+        html = str(summary_to_html(sample))
+        for needle in ('Discharge Summary', 'fa-user', 'fa-calendar', '#dc3545', 'fa-exclamation-triangle',
+                       '&lt;script&gt;'):
+            self.assertIn(needle, html)
+        self.assertNotIn('---', html)
+        self.assertNotIn('**', html)
+        self.assertNotIn('---', clean_summary_text(sample))
+        self.assertIn('Just a plain note.', str(summary_to_html("Just a plain note.")))
+        bare = str(summary_to_html("Discharge Summary\n- **Patient**: PT-1\n- **Plan**: home"))
+        self.assertIn('Discharge Summary', bare)
+        self.assertIn('fa-file-text-o', bare)  # first bare line became the card title
+
+    def test_30_top_alert_ribbons_and_icon_buttons(self):
+        d = self._locked()
+        self.assertEqual(d.top_alert_kind, 'pharmacy')
+        self.assertEqual(d.top_alert_title, 'Penicillin Allergy Conflict')
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        for needle in ('Allergy Hold', 'Cleared', 'fa-cog fa-spin', 'fa-beat-fade', 'fa-shield text-success',
+                       'fa-pulse', 'action_generate_invoice', 'action_view_invoice'):
+            self.assertIn(needle, arch)
+        self.assertEqual(arch.count('name="action_open_pharmacy_wizard"'), 4)
+        self.assertEqual(arch.count('name="action_open_billing_wizard"'), 4)
+        self.assertEqual(arch.count('name="action_open_insurance_wizard"'), 4)
 

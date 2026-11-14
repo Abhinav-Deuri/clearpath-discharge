@@ -52,6 +52,7 @@ class ClearpathSupplyLine(models.Model):
     item_name = fields.Char(required=True)
     surgical_qty_used = fields.Integer(string="Used in Surgery")
     billed_qty = fields.Integer(string="Billed")
+    price_unit = fields.Float(string="Unit Price", digits='Product Price')
     discrepancy_qty = fields.Integer(
         string="Unbilled Qty", compute='_compute_discrepancy', store=True,
     )
