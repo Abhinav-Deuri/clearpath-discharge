@@ -22,9 +22,15 @@
     ],
 
     'assets': {
+        # Blue + white theme: colour variables go in before Odoo's own, so the whole backend follows them.
+        'web._assets_primary_variables': [
+            ('before', 'web/static/src/scss/primary_variables.scss',
+             'clearpath_discharge/static/src/scss/clearpath_primary_variables.scss'),
+        ],
         'web.assets_backend': [
             'clearpath_discharge/static/src/voice_recorder/voice_recorder.js',
             'clearpath_discharge/static/src/scss/clearpath_wizards.scss',
+            'clearpath_discharge/static/src/scss/clearpath_theme.scss',
         ],
     },
 }

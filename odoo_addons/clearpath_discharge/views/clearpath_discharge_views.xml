@@ -241,7 +241,7 @@
                     </div>
 
                     <!-- Patient & governance banner -->
-                    <div class="o_cp_banner d-flex flex-wrap align-items-center justify-content-between bg-light border rounded-3 px-3 py-2 mb-4">
+                    <div class="o_cp_banner d-flex flex-wrap align-items-center justify-content-between px-4 py-3 mb-4">
                         <div class="d-flex flex-wrap align-items-center gap-3">
                             <span class="d-inline-flex align-items-center">
                                 <i class="oi text-primary me-1" data-icon="person"/><span class="text-muted me-1">Patient:</span>
@@ -257,10 +257,10 @@
                             </span>
                         </div>
                         <div class="d-flex flex-wrap align-items-center gap-2">
-                            <span class="badge rounded-pill text-bg-primary px-3 py-2">
+                            <span class="o_cp_pill">
                                 <i class="oi me-1" data-icon="fork_right"/>Rev <field name="revision_id" class="d-inline"/>
                             </span>
-                            <span class="badge rounded-pill text-bg-dark font-monospace px-3 py-2" invisible="not revision_hash"
+                            <span class="o_cp_pill font-monospace" invisible="not revision_hash"
                                   title="Snapshot hash (the full SHA-256 is in the Audit Packet tab)">
                                 <i class="oi me-1" data-icon="tag"/><field name="short_revision_hash" class="d-inline"/>
                             </span>
@@ -274,14 +274,14 @@
                     </div>
 
                     <!-- Section 1: multimodal bedside inputs -->
-                    <div class="card shadow-sm border rounded-3 bg-light p-3 mb-4">
-                        <div class="text-uppercase fw-bold text-muted small mb-3">
+                    <div class="o_cp_panel p-3 mb-4">
+                        <div class="o_cp_panel_title mb-3">
                             <i class="oi me-1" data-icon="mic"/> Multimodal Bedside Inputs
                         </div>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <div class="card h-100 border bg-white p-3 rounded-3">
-                                    <h5 class="fw-bold mb-2"><i class="oi text-danger me-2" data-icon="mic"/>Doctor Voice Dictation</h5>
+                                <div class="o_cp_subpanel h-100 p-3">
+                                    <h5 class="fw-bold mb-3 d-flex align-items-center"><i class="oi o_cp_chip o_cp_chip_red me-2" data-icon="mic"/>Doctor Voice Dictation</h5>
                                     <div invisible="state != 'draft'"
                                          groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse">
                                         <field name="voice_note_audio" filename="voice_note_filename" widget="wav_recorder" nolabel="1"/>
@@ -300,10 +300,10 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="card h-100 border bg-white p-3 rounded-3 d-flex flex-column justify-content-between">
+                                <div class="o_cp_subpanel h-100 p-3 d-flex flex-column justify-content-between">
                                     <div>
-                                        <h5 class="fw-bold mb-2"><i class="oi text-primary me-2" data-icon="photo_camera"/>Nurse Supply Sheet Checklist</h5>
-                                        <div class="bg-light border rounded-3 p-3 text-center my-2">
+                                        <h5 class="fw-bold mb-3 d-flex align-items-center"><i class="oi o_cp_chip me-2" data-icon="photo_camera"/>Nurse Supply Sheet Checklist</h5>
+                                        <div class="o_cp_drop p-3 text-center my-2">
                                             <field name="nurse_checklist_image" widget="image" nolabel="1"
                                                    options="{'size': [0, 140]}" readonly="state != 'draft'"/>
                                         </div>
@@ -321,18 +321,18 @@
                     </div>
 
                     <!-- Section 2: structured AI discharge summary -->
-                    <div class="card shadow-sm border border-primary-subtle rounded-3 bg-primary bg-opacity-10 p-3 mb-4">
+                    <div class="o_cp_panel o_cp_panel_accent p-3 mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
-                                <div class="text-uppercase fw-bold text-primary small">Structured AI Discharge Summary</div>
-                                <h4 class="fw-bold mb-0 mt-1 text-dark"><i class="oi text-primary me-2" data-icon="flash_on"/>Discharge Summary</h4>
+                                <div class="o_cp_panel_title">Structured AI Discharge Summary</div>
+                                <h4 class="fw-bold mb-0 mt-2 text-dark d-flex align-items-center"><i class="oi o_cp_chip me-2" data-icon="flash_on"/>Discharge Summary</h4>
                             </div>
                             <a role="button" class="btn btn-light border btn-sm" data-bs-toggle="collapse"
                                data-bs-target="#cp_edit_summary" invisible="state == 'released'">
                                 <i class="oi" data-icon="edit"/> Edit summary text
                             </a>
                         </div>
-                        <div class="bg-white rounded-3 shadow-sm p-0 overflow-hidden" invisible="not ai_draft_summary">
+                        <div class="o_cp_summary_body" invisible="not ai_draft_summary">
                             <field name="ai_draft_summary_html" nolabel="1"/>
                         </div>
                         <p class="text-muted mb-0" invisible="ai_draft_summary">

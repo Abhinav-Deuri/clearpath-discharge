@@ -1,0 +1,418 @@
+// =====================================================================================================
+// ClearPath theme: soft blue page, white rounded cards, navy accents, gentle motion.
+// The colours themselves come from clearpath_primary_variables.scss; this file is layout, depth, motion.
+// =====================================================================================================
+:root {
+    --cp-navy: #0b2a6f;
+    --cp-navy-2: #123a94;
+    --cp-blue: #1976d2;
+    --cp-blue-soft: #e8f1fd;
+    --cp-page: #f2f6fc;
+    --cp-ink: #1b2540;
+    --cp-muted: #7b869c;
+    --cp-line: #e4eaf4;
+    --cp-radius: 16px;
+    --cp-shadow: 0 6px 22px rgba(20, 50, 110, .07);
+    --cp-shadow-hover: 0 12px 30px rgba(20, 50, 110, .14);
+    --cp-ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+// ---- Motion ------------------------------------------------------------------------------------------
+// Every entrance ends on `transform: none`, so no stacking context is left behind for dropdowns.
+@keyframes cp-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes cp-pop { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes cp-slide { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes cp-float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-10px, 8px); } }
+@keyframes cp-sheen { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+// ---- Page chrome -------------------------------------------------------------------------------------
+.o_web_client {
+    background-color: var(--cp-page);
+}
+
+.o_main_navbar {
+    background: linear-gradient(90deg, var(--cp-navy) 0%, var(--cp-navy-2) 100%);
+    box-shadow: 0 2px 12px rgba(11, 42, 111, .25);
+    --NavBar-entry-borderRadius: 10px;
+
+    .o_menu_brand { font-weight: 700; letter-spacing: .01em; }
+    .o_menu_sections .o_nav_entry,
+    .o_menu_sections .dropdown-toggle,
+    .o_menu_systray button {
+        transition: background-color .18s var(--cp-ease), color .18s var(--cp-ease);
+    }
+}
+
+.o_control_panel {
+    background-color: transparent;
+    --ControlPanel-border-bottom: 0;
+
+    .o_last_breadcrumb_item, .o_breadcrumb .active { color: var(--cp-ink); font-weight: 700; }
+    .breadcrumb, .o_cp_action_menus .btn, .o_form_button_save, .o_form_button_cancel { background-color: transparent; }
+
+    .o_searchview {
+        border: 1px solid var(--cp-line);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(20, 50, 110, .05);
+        transition: box-shadow .2s var(--cp-ease), border-color .2s var(--cp-ease);
+
+        &:focus-within {
+            border-color: var(--cp-blue);
+            box-shadow: 0 0 0 3px rgba(25, 118, 210, .15);
+        }
+    }
+}
+
+// ---- Buttons -----------------------------------------------------------------------------------------
+.o_web_client .btn {
+    transition: transform .12s var(--cp-ease), box-shadow .18s var(--cp-ease),
+        background-color .18s var(--cp-ease), border-color .18s var(--cp-ease), color .18s var(--cp-ease);
+
+    &:active:not(:disabled) { transform: scale(.97); }
+}
+.o_web_client .btn-primary:not(:disabled) {
+    box-shadow: 0 4px 12px rgba(25, 118, 210, .28);
+    &:hover { box-shadow: 0 6px 16px rgba(25, 118, 210, .38); transform: translateY(-1px); }
+    &:active { transform: scale(.97); }
+}
+
+// ---- List views: one white rounded card --------------------------------------------------------------
+.o_list_view .o_content > .o_list_renderer {
+    margin: 4px 16px 16px;
+    border: 1px solid var(--cp-line);
+    border-radius: var(--cp-radius);
+    background: #fff;
+    box-shadow: var(--cp-shadow);
+    animation: cp-rise .45s var(--cp-ease) both;
+}
+.o_list_renderer {
+    --ListRenderer-thead-bg-color: #f7f9fd;
+
+    .o_list_table thead th {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: var(--cp-muted);
+    }
+    .o_list_table tbody tr.o_data_row {
+        transition: background-color .15s var(--cp-ease);
+        &:hover { --table-bg: var(--cp-blue-soft); background-color: var(--cp-blue-soft); }
+    }
+}
+
+// ---- Kanban cards ------------------------------------------------------------------------------------
+.o_kanban_renderer .o_kanban_record:not(.o_kanban_ghost) {
+    border-color: var(--cp-line);
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(20, 50, 110, .05);
+    transition: transform .18s var(--cp-ease), box-shadow .18s var(--cp-ease);
+
+    &:hover { transform: translateY(-2px); box-shadow: var(--cp-shadow-hover); }
+}
+
+// ---- Forms: the sheet is a floating white card -------------------------------------------------------
+.o_form_view {
+    .o_form_sheet_bg { background: var(--cp-page); }
+
+    // Workflow buttons + status steps sit in their own white rounded bar.
+    .o_form_statusbar {
+        margin: 4px 16px 0;
+        padding: 10px 14px !important;
+        background: #fff;
+        border: 1px solid var(--cp-line);
+        border-radius: var(--cp-radius);
+        box-shadow: var(--cp-shadow);
+    }
+
+    @include media-breakpoint-up(md) {
+        .o_form_sheet {
+            --formView-sheet-border-radius: var(--cp-radius);
+            margin-top: 14px;
+            margin-bottom: 18px;
+            border-color: var(--cp-line);
+            box-shadow: var(--cp-shadow);
+            animation: cp-rise .45s var(--cp-ease) both;
+        }
+    }
+
+    .o_notebook .nav-tabs .nav-link {
+        transition: color .18s var(--cp-ease), background-color .18s var(--cp-ease), border-color .18s var(--cp-ease);
+        &.active { color: var(--cp-blue); font-weight: 700; }
+    }
+}
+
+// ---- Dialogs -----------------------------------------------------------------------------------------
+.modal .modal-content {
+    border: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(11, 42, 111, .25);
+    animation: cp-pop .28s var(--cp-ease) both;
+}
+.modal .modal-header { border-bottom: 1px solid var(--cp-line); }
+// Inside a dialog the dialog itself is the card: no page tint, no second floating sheet.
+.modal .o_form_view {
+    .o_form_sheet_bg { background: #fff; }
+    .o_form_sheet { margin-top: 0; margin-bottom: 0; border: 0; box-shadow: none; animation: none; }
+}
+.modal .modal-footer { border-top: 1px solid var(--cp-line); background: #f7f9fd; }
+
+// =====================================================================================================
+// Discharge form: no outer sheet box, the sections themselves are the cards (dashboard layout).
+// =====================================================================================================
+.o_clearpath_discharge_form {
+    @include media-breakpoint-up(md) {
+        .o_form_sheet {
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            animation: none;
+        }
+    }
+
+    .oe_title h1 { color: var(--cp-ink); font-weight: 800; }
+
+    // -- Navy hero: patient + governance (the "balance card" of the page)
+    .o_cp_banner {
+        position: relative;
+        overflow: hidden;
+        color: #fff;
+        background: linear-gradient(120deg, var(--cp-navy) 0%, var(--cp-navy-2) 60%, #1b55c4 100%);
+        border-radius: var(--cp-radius);
+        box-shadow: 0 14px 30px rgba(11, 42, 111, .28);
+        animation: cp-rise .5s var(--cp-ease) both;
+
+        &::before, &::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .08);
+            pointer-events: none;
+            animation: cp-float 9s ease-in-out infinite;
+        }
+        &::before { width: 220px; height: 220px; right: -60px; top: -110px; }
+        &::after { width: 130px; height: 130px; right: 120px; bottom: -90px; animation-delay: -4s; }
+
+        > * { position: relative; z-index: 1; }
+
+        .text-muted { color: rgba(255, 255, 255, .72) !important; }
+        .text-primary, .oi { color: #a9d0ff !important; }
+        .o_field_widget, .o_field_widget a, .o_field_widget span, .o_field_widget input {
+            color: #fff !important;
+            font-weight: 700;
+        }
+        .o_field_widget input { background: transparent; border-color: rgba(255, 255, 255, .35); }
+        .o_field_widget { margin: 0 !important; vertical-align: baseline; line-height: inherit; }
+        .o_cp_pill .o_field_widget { margin-left: .3rem !important; }
+        span.d-inline-flex { align-items: baseline !important; font-size: 1rem; }
+
+        .o_cp_pill {
+            display: inline-flex;
+            align-items: center;
+            padding: .4rem .85rem;
+            border-radius: 999px;
+            font-size: .8rem;
+            font-weight: 700;
+            color: #fff;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .22);
+            backdrop-filter: blur(4px);
+        }
+        .badge.text-bg-danger .oi, .badge.text-bg-success .oi { color: #fff !important; }
+    }
+
+    // -- White section cards
+    .o_cp_panel {
+        background: #fff;
+        border: 1px solid var(--cp-line);
+        border-radius: var(--cp-radius);
+        box-shadow: var(--cp-shadow);
+        transition: box-shadow .25s var(--cp-ease);
+        animation: cp-rise .5s var(--cp-ease) both;
+
+        &:hover { box-shadow: var(--cp-shadow-hover); }
+    }
+    .o_cp_panel:nth-of-type(1) { animation-delay: .06s; }
+    .o_cp_panel_accent { animation-delay: .14s; border-top: 4px solid var(--cp-blue); }
+
+    .o_cp_panel_title {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .07em;
+        text-transform: uppercase;
+        color: var(--cp-muted);
+    }
+
+    .o_cp_subpanel {
+        background: #f8fafe;
+        border: 1px solid var(--cp-line);
+        border-radius: 14px;
+        transition: border-color .2s var(--cp-ease), background-color .2s var(--cp-ease), transform .2s var(--cp-ease);
+
+        &:hover { border-color: #c5d9f5; background: #fff; transform: translateY(-2px); }
+        h5 { color: var(--cp-ink); }
+    }
+
+    .o_cp_drop {
+        background: #fff;
+        border: 1.5px dashed #b9cdea;
+        border-radius: 12px;
+        transition: border-color .2s var(--cp-ease), background-color .2s var(--cp-ease);
+        &:hover { border-color: var(--cp-blue); background: var(--cp-blue-soft); }
+    }
+
+    .o_cp_summary_body {
+        background: #fff;
+        border: 1px solid var(--cp-line);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    // -- Icon chips (round tinted background behind an icon)
+    .o_cp_chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 20px;
+        color: var(--cp-blue);
+        background: var(--cp-blue-soft);
+
+        &.o_cp_chip_red { color: #e5484d; background: #fdecec; }
+    }
+
+    // -- Alert strips slide in
+    .o_cp_strip {
+        border-radius: 14px;
+        box-shadow: var(--cp-shadow);
+        animation: cp-slide .4s var(--cp-ease) both;
+    }
+
+    // -- Notebook as a white card with pill tabs
+    .o_notebook {
+        padding: 14px 16px 16px;
+        background: #fff;
+        border: 1px solid var(--cp-line);
+        border-radius: var(--cp-radius);
+        box-shadow: var(--cp-shadow);
+        animation: cp-rise .5s var(--cp-ease) .22s both;
+
+        .nav-tabs {
+            gap: 6px;
+            border-bottom: 0;
+            margin-bottom: 12px;
+            background: transparent;
+        }
+        .nav-tabs .nav-link {
+            border: 0;
+            border-radius: 999px;
+            padding: .4rem 1rem;
+            color: var(--cp-muted);
+            font-weight: 600;
+            background: #f2f6fc;
+
+            &:hover { color: var(--cp-blue); background: var(--cp-blue-soft); }
+            &.active { color: #fff; background: var(--cp-blue); box-shadow: 0 4px 12px rgba(25, 118, 210, .3); }
+        }
+    }
+
+    // -- Smart buttons: separate floating tiles with an icon chip
+    @include media-breakpoint-up(md) {
+        .o-form-buttonbox {
+            gap: 10px;
+            border: 0;
+
+            > * + * { margin-left: 0 !important; }
+
+            .oe_stat_button.o_cp_stat {
+                border: 1px solid var(--cp-line) !important;
+                border-radius: 14px !important;
+                box-shadow: var(--cp-shadow);
+                animation: cp-pop .4s var(--cp-ease) both;
+                transition: transform .18s var(--cp-ease), box-shadow .18s var(--cp-ease),
+                    background-color .18s var(--cp-ease);
+
+                &:hover { transform: translateY(-3px); box-shadow: var(--cp-shadow-hover); }
+                &:nth-child(2) { animation-delay: .04s; }
+                &:nth-child(3) { animation-delay: .08s; }
+                &:nth-child(4) { animation-delay: .12s; }
+                &:nth-child(n+5) { animation-delay: .16s; }
+            }
+        }
+    }
+    .oe_stat_button.o_cp_stat {
+        .o_stat_value { color: var(--cp-ink); }
+        .o_stat_value .text-danger { color: var(--bs-danger); }
+
+        .o_button_icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 38px;
+            height: 38px;
+            margin-left: 0 !important;
+            margin-right: .55rem;
+            border-radius: 50%;
+            font-size: 20px !important;
+            background: color-mix(in srgb, currentColor 14%, transparent);
+
+            &::before { margin-right: 0 !important; }
+        }
+    }
+}
+
+// =====================================================================================================
+// Pop-ups (Pharmacy / Billing / Insurance / Alerts)
+// =====================================================================================================
+.o_clearpath_wizard {
+    .o_cp_hero {
+        border: 0;
+        border-left: 0;
+        color: #fff;
+        background: linear-gradient(120deg, var(--cp-navy) 0%, var(--cp-navy-2) 70%, #1b55c4 100%);
+        border-radius: var(--cp-radius);
+        box-shadow: 0 10px 24px rgba(11, 42, 111, .25);
+        animation: cp-rise .4s var(--cp-ease) both;
+
+        .o_cp_hero_icon { color: #fff; background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .22); }
+        .o_cp_hero_title { color: #fff; }
+        .o_cp_hero_sub, .o_cp_hero_sub .o_field_widget { color: rgba(255, 255, 255, .78); }
+    }
+
+    .o_cp_card, .o_cp_alert, .o_cp_tiles .o_cp_tile {
+        border-radius: 14px;
+        animation: cp-rise .45s var(--cp-ease) both;
+    }
+    .o_cp_card { border-left-width: 1px; box-shadow: var(--cp-shadow); }
+    .o_cp_alert { animation-delay: .05s; }
+    .o_cp_tiles .o_cp_tile {
+        background: #f8fafe;
+        transition: transform .18s var(--cp-ease), box-shadow .18s var(--cp-ease);
+
+        &:hover { transform: translateY(-2px); box-shadow: var(--cp-shadow); }
+        &:nth-child(2) { animation-delay: .06s; }
+        &:nth-child(3) { animation-delay: .12s; }
+    }
+    .o_cp_card:nth-of-type(n+2) { animation-delay: .1s; }
+}
+
+// Long-running button: Odoo disables it while the RPC runs; show a moving sheen so the wait reads as work.
+.o_clearpath_discharge_form .o_form_statusbar .btn-primary:disabled {
+    background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: cp-sheen 1.3s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .o_web_client *, .modal * {
+        animation-duration: .001s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001s !important;
+    }
+}

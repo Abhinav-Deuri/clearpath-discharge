@@ -1,0 +1,16 @@
+// ClearPath blue + white theme: loaded BEFORE Odoo's primary variables, so every `!default` there picks
+// these values up. This recolours the whole backend (buttons, links, active states, navbar), not just
+// the ClearPath screens.
+$o-community-color: #1976d2;
+$o-brand-odoo: #1976d2;
+$o-brand-primary: #1976d2;
+$o-action: #1976d2;
+$o-main-link-color: #1565c0;
+
+$o-navbar-background: #0b2a6f;
+$o-webclient-background-color: #f2f6fc;
+
+$o-border-radius: .5rem;
+$o-border-radius-sm: .375rem;
+$o-border-radius-lg: .75rem;
+$o-border-radius-xl: 1rem;
