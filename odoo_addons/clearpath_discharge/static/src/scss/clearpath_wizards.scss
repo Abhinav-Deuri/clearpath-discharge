@@ -163,20 +163,31 @@
     display: none !important;
 }
 
-// Taller smart buttons so the count, icon and department label all fit inside the box.
-.o_clearpath_discharge_form .oe_button_box .oe_stat_button {
-    height: auto;
-    min-height: 4.75rem;
-    padding-top: .5rem;
-    padding-bottom: .5rem;
-    align-items: center;
+// Taller smart buttons (ALL of them: alerts, pharmacy, billing, insurance, invoice) so the count,
+// icon and department label fit inside the box. Specific + !important: Odoo fixes the stat button height.
+.o_form_view.o_clearpath_discharge_form .o_form_sheet .oe_button_box {
+    grid-auto-rows: auto;
 
-    .o_stat_info {
-        overflow: visible;
-        justify-content: center;
-    }
-    .o_stat_text, .o_stat_value {
-        line-height: 1.25;
-        white-space: nowrap;
+    .oe_stat_button {
+        height: auto !important;
+        min-height: 6rem !important;
+        padding: .75rem .5rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: visible !important;
+
+        .o_stat_info {
+            overflow: visible !important;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .o_stat_value, .o_stat_text {
+            line-height: 1.3 !important;
+            white-space: nowrap;
+            overflow: visible !important;
+        }
+        .o_button_icon { margin-right: .35rem; }
     }
 }
