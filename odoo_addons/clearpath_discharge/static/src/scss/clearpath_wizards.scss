@@ -1,0 +1,124 @@
+// Pop-up cards for the departmental sign-offs (Pharmacy / Billing / Insurance).
+// Built on Bootstrap CSS variables so light and dark themes both work.
+.o_clearpath_wizard {
+    --cp-a: #0f766e;
+    --cp-b: #14b8a6;
+
+    &.o_cp_pharmacy { --cp-a: #0f766e; --cp-b: #14b8a6; }
+    &.o_cp_billing { --cp-a: #3730a3; --cp-b: #6366f1; }
+    &.o_cp_insurance { --cp-a: #6d28d9; --cp-b: #a78bfa; }
+
+    .o_cp_hero {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        border-radius: 14px;
+        color: #fff;
+        background: linear-gradient(135deg, var(--cp-a), var(--cp-b));
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+
+        .o_cp_hero_icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            font-size: 22px;
+            background: rgba(255, 255, 255, .2);
+        }
+        .o_cp_hero_text { flex: 1 1 auto; min-width: 0; }
+        .o_cp_hero_title { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+        .o_cp_hero_sub {
+            margin-top: 2px;
+            font-size: .85rem;
+            opacity: .92;
+            .o_field_widget { color: #fff; }
+        }
+        .o_cp_hero_status .badge {
+            font-size: .8rem;
+            padding: .45em .8em;
+            border-radius: 999px;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, .55);
+        }
+    }
+
+    .o_cp_alert {
+        border: 0;
+        border-left: 5px solid;
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+
+        &.alert-danger { border-left-color: var(--bs-danger); }
+        &.alert-warning { border-left-color: var(--bs-warning); }
+        &.alert-success { border-left-color: var(--bs-success); }
+        &.alert-secondary { border-left-color: var(--bs-secondary); }
+
+        .o_cp_alert_title { font-weight: 700; margin-bottom: 2px; }
+        .o_field_widget { display: inline-block; width: auto; }
+        ul { margin-bottom: 0; }
+    }
+
+    .o_cp_card {
+        margin-bottom: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--bs-border-color);
+        border-left: 4px solid var(--cp-b);
+        border-radius: 12px;
+        background: var(--bs-body-bg);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+
+        .o_cp_card_title {
+            margin-bottom: 8px;
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--bs-secondary-color);
+        }
+    }
+
+    .o_cp_tiles {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+
+        .o_cp_tile {
+            padding: 10px 14px;
+            border: 1px solid var(--bs-border-color);
+            border-radius: 12px;
+            background: var(--bs-tertiary-bg);
+
+            .o_cp_tile_label {
+                display: block;
+                font-size: .7rem;
+                font-weight: 700;
+                letter-spacing: .06em;
+                text-transform: uppercase;
+                color: var(--bs-secondary-color);
+            }
+            .o_field_widget {
+                font-size: 1.5rem;
+                font-weight: 700;
+                line-height: 1.3;
+            }
+        }
+    }
+
+    .o_cp_hint {
+        margin: 4px 2px 0;
+        font-size: .8rem;
+        color: var(--bs-secondary-color);
+    }
+}
+
+// Status badge inside the stat buttons on the discharge form.
+.o_form_view .oe_button_box .oe_stat_button .o_stat_value .badge {
+    font-size: .78rem;
+    font-weight: 600;
+}

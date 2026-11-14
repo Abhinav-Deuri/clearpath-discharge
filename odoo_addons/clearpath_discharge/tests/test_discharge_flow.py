@@ -5,6 +5,11 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 MODEL_REQUESTS = 'odoo.addons.clearpath_discharge.models.clearpath_discharge.requests'
+WIZARDS = {
+    'pharmacy': 'clearpath.pharmacy.approval.wizard',
+    'billing': 'clearpath.billing.approval.wizard',
+    'insurance': 'clearpath.insurance.approval.wizard',
+}
 TRANSCRIPT = "POD1 appendectomy. Start Amoxicillin 500mg TID for 5 days."
 
 
@@ -115,6 +120,14 @@ class TestDischargeFlow(TransactionCase):
         cls.nurse = user('t_nurse', 'clearpath_discharge.group_clearpath_nurse')
         cls.insurer = user('t_ins', 'clearpath_discharge.group_clearpath_admin')
 
+    def _wizard(self, d, dept, user=None):
+        """The pop-up a smart button opens (Odoo passes the discharge through the context)."""
+        env = d.with_user(user).env if user else d.env
+        return env[WIZARDS[dept]].with_context(default_discharge_id=d.id).create({'discharge_id': d.id})
+
+    def _approve(self, d, dept, user=None):
+        return self._wizard(d, dept, user).action_approve()
+
     def _locked(self):
         d = self.discharge
         d.action_generate_ai_draft()
@@ -125,10 +138,10 @@ class TestDischargeFlow(TransactionCase):
         """Late edit -> Rev 2 -> re-lock -> pharmacy + billing sign-off."""
         d.action_simulate_late_doctor_edit()
         d.action_lock_revision_and_verify()
-        d.action_pharmacist_approve()
+        self._approve(d, 'pharmacy')
         for line in d.supply_line_ids:
             line.billed_qty = line.surgical_qty_used
-        d.action_billing_approve()
+        self._approve(d, 'billing')
 
     # ------------------------------------------------------------ core flow
     def test_01_lock_flags_conflict_gap_and_insurance_hold(self):
@@ -144,10 +157,11 @@ class TestDischargeFlow(TransactionCase):
 
     def test_02_approvals_blocked_while_flagged(self):
         d = self._locked()
-        for action in (d.action_pharmacist_approve, d.action_billing_approve,
-                       d.action_admin_approve_insurance, d.action_coordinator_release):
+        for dept in ('pharmacy', 'billing', 'insurance'):
             with self.assertRaises(UserError):
-                action()
+                self._approve(d, dept)
+        with self.assertRaises(UserError):
+            d.action_coordinator_release()
 
     def test_03_late_edit_bumps_revision_and_invalidates_all_three(self):
         d = self._locked()
@@ -184,7 +198,7 @@ class TestDischargeFlow(TransactionCase):
         self.assertTrue(d.coordinator_gate_locked)
         with self.assertRaises(UserError):
             d.action_coordinator_release()
-        d.action_admin_approve_insurance()
+        self._approve(d, 'insurance')
         self.assertEqual(d.state, 'cleared')
         self.assertFalse(d.coordinator_gate_locked)
         d.action_coordinator_release()
@@ -202,13 +216,13 @@ class TestDischargeFlow(TransactionCase):
             d.with_user(self.nurse).action_lock_revision_and_verify()
         d.with_user(self.doctor).action_lock_revision_and_verify()
         with self.assertRaises(UserError):
-            d.with_user(self.billing).action_pharmacist_approve()
+            self._approve(d, 'pharmacy', self.billing)
         with self.assertRaises(UserError):
-            d.with_user(self.pharmacist).action_billing_approve()
+            self._approve(d, 'billing', self.pharmacist)
         with self.assertRaises(UserError):
-            d.with_user(self.doctor).action_admin_approve_insurance()
+            self._approve(d, 'insurance', self.doctor)
         with self.assertRaises(UserError):
-            d.with_user(self.nurse).action_admin_approve_insurance()
+            self._approve(d, 'insurance', self.nurse)
         with self.assertRaises(UserError):
             d.with_user(self.doctor).action_coordinator_release()
 
@@ -241,7 +255,7 @@ class TestDischargeFlow(TransactionCase):
         d = self._locked()
         self._reconcile_and_sign_all_but_insurance(d)
         self.assertNotEqual(d.state, 'cleared')
-        d.with_user(self.insurer).action_admin_approve_insurance()
+        self._approve(d, 'insurance', self.insurer)
         self.assertEqual(d.state, 'cleared')
         self.assertEqual(d.insurance_approver_id, self.insurer)
 
@@ -307,7 +321,71 @@ class TestDischargeFlow(TransactionCase):
         self._reconcile_and_sign_all_but_insurance(d)
         self.patient.policy_number = False
         with self.assertRaises(UserError):
-            d.action_admin_approve_insurance()
+            self._approve(d, 'insurance')
         self.patient.policy_number = 'POL-T1'
-        d.action_admin_approve_insurance()
+        self._approve(d, 'insurance')
         self.assertEqual(d.insurance_status, 'approved')
+
+    # ------------------------------------------------------------ Phase 6: pop-ups + smart buttons
+    def test_18_openers_return_modal_actions(self):
+        d = self._locked()
+        for method, model in (('action_open_pharmacy_wizard', WIZARDS['pharmacy']),
+                              ('action_open_billing_wizard', WIZARDS['billing']),
+                              ('action_open_insurance_wizard', WIZARDS['insurance'])):
+            action = getattr(d, method)()
+            self.assertEqual(action['type'], 'ir.actions.act_window')
+            self.assertEqual(action['target'], 'new')
+            self.assertEqual(action['res_model'], model)
+            self.assertEqual(action['context']['default_discharge_id'], d.id)
+
+    def test_19_stat_button_counts_and_labels(self):
+        d = self.discharge
+        self.assertEqual(d.pharmacy_button_text, 'Not run')
+        d = self._locked()
+        self.assertEqual((d.pharmacy_conflict_count, d.unbilled_item_count), (1, 2))
+        self.assertEqual(d.pharmacy_button_text, '1 Allergy Flag')
+        self.assertEqual(d.billing_button_text, '2 Unbilled Items')
+        self.assertEqual(d.insurance_button_text, '2 Holds')
+        self._reconcile_and_sign_all_but_insurance(d)
+        self.assertEqual((d.pharmacy_button_text, d.billing_button_text), ('Approved', 'Approved'))
+        self.assertEqual(d.insurance_hold_count, 1)  # unreconciled supplies at lock time
+        d.write({'raw_handoff_note': 'late clinical change'})  # Stale-Write Guard
+        self.assertEqual((d.pharmacy_button_text, d.billing_button_text, d.insurance_button_text),
+                         ('Stale', 'Stale', 'Stale'))
+
+    def test_20_wizard_can_approve_follows_blockers(self):
+        d = self._locked()
+        pharmacy = self._wizard(d, 'pharmacy')
+        self.assertFalse(pharmacy.can_approve)
+        self.assertIn('allergy conflict', str(pharmacy.blocker_html))
+        self.assertIn('Amoxicillin', str(pharmacy.conflict_html))
+        self.assertFalse(self._wizard(d, 'billing').can_approve)
+        self.assertFalse(self._wizard(d, 'insurance').can_approve)
+        d.action_simulate_late_doctor_edit()
+        d.action_lock_revision_and_verify()
+        self.assertTrue(self._wizard(d, 'pharmacy').can_approve)  # Azithromycin is clean
+
+    def test_21_billing_wizard_edits_billed_qty_without_new_revision(self):
+        d = self._locked()
+        d.action_simulate_late_doctor_edit()
+        d.action_lock_revision_and_verify()
+        wiz = self._wizard(d, 'billing')
+        self.assertEqual((len(wiz.line_ids), wiz.total_unbilled), (2, 3))
+        self.assertFalse(wiz.can_approve)
+        with self.assertRaises(UserError):
+            wiz.action_approve()
+        for line in wiz.line_ids:  # what the user types into the Billed column
+            line.billed_qty = line.surgical_qty_used
+        self.assertEqual(wiz.total_unbilled, 0)
+        self.assertTrue(wiz.can_approve)
+        wiz.action_approve()
+        self.assertEqual(d.supply_line_ids.mapped('billed_qty'), [4, 1])
+        self.assertEqual((d.revision_id, d.billing_status), (2, 'approved'))  # no new revision
+
+    def test_22_approved_wizard_cannot_approve_twice(self):
+        d = self._locked()
+        self._reconcile_and_sign_all_but_insurance(d)
+        wiz = self._wizard(d, 'pharmacy')
+        self.assertFalse(wiz.can_approve)
+        with self.assertRaises(UserError):
+            wiz.action_approve()

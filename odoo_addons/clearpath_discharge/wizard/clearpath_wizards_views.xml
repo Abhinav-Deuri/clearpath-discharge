@@ -1,0 +1,298 @@
+<odoo>
+    <!-- =================================================================== PHARMACY -->
+    <record id="clearpath_pharmacy_wizard_view_form" model="ir.ui.view">
+        <field name="name">clearpath.pharmacy.approval.wizard.form</field>
+        <field name="model">clearpath.pharmacy.approval.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Pharmacy Safety Review" create="0" delete="0" duplicate="0">
+                <field name="discharge_id" invisible="1"/>
+                <field name="can_approve" invisible="1"/>
+                <field name="state" invisible="1"/>
+                <sheet class="o_clearpath_wizard o_cp_pharmacy">
+                    <div class="o_cp_hero">
+                        <div class="o_cp_hero_icon"><i class="fa fa-medkit"/></div>
+                        <div class="o_cp_hero_text">
+                            <div class="o_cp_hero_title">Pharmacy Safety Review</div>
+                            <div class="o_cp_hero_sub">
+                                <field name="patient_name" class="d-inline"/> &#183;
+                                <field name="patient_code" class="d-inline"/> &#183; Bed
+                                <field name="bed_number" class="d-inline"/> &#183; Rev
+                                <field name="revision_id" class="d-inline"/>
+                            </div>
+                        </div>
+                        <div class="o_cp_hero_status">
+                            <field name="status" widget="badge"
+                                   decoration-danger="status == 'flagged'"
+                                   decoration-success="status == 'approved'"
+                                   decoration-warning="status == 'stale'"/>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-danger o_cp_alert" role="alert"
+                         invisible="not conflict_html or status == 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-exclamation-triangle"/> Allergy conflict detected</div>
+                        <field name="conflict_html" nolabel="1"/>
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert"
+                         invisible="conflict_html or status != 'pending'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> No allergy conflicts found</div>
+                        Review the draft and medications below, then approve this revision.
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <field name="pharmacist_id" class="d-inline" options="{'no_open': True}"/> signed off on
+                        <field name="pharmacy_approved_on" class="d-inline"/>
+                    </div>
+                    <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
+                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale check</div>
+                        The record changed after locking. Lock the revision again to re-run the checks.
+                    </div>
+                    <div class="alert alert-warning o_cp_alert" role="alert" invisible="not blocker_html">
+                        <field name="blocker_html" nolabel="1"/>
+                    </div>
+
+                    <div class="o_cp_card">
+                        <div class="o_cp_card_title">Medications to be dispensed</div>
+                        <field name="medication_line_ids" nolabel="1">
+                            <list decoration-danger="is_flagged" create="0" delete="0" edit="0">
+                                <field name="drug_name"/>
+                                <field name="dosage"/>
+                                <field name="frequency"/>
+                                <field name="conflict_reason"/>
+                                <field name="is_flagged" column_invisible="True"/>
+                            </list>
+                        </field>
+                    </div>
+                    <div class="o_cp_card">
+                        <div class="o_cp_card_title">Documented allergies</div>
+                        <field name="allergy_ids" nolabel="1">
+                            <list create="0" delete="0" edit="0">
+                                <field name="allergen"/>
+                                <field name="reaction"/>
+                                <field name="criticality" widget="badge" decoration-danger="criticality == 'high'"/>
+                            </list>
+                        </field>
+                    </div>
+                    <div class="o_cp_card">
+                        <div class="o_cp_card_title">AI discharge summary (draft)</div>
+                        <field name="ai_draft_summary_html" nolabel="1"/>
+                    </div>
+                    <p class="o_cp_hint">To resolve a conflict the prescriber changes the medication on the clinical
+                        draft. That creates a new revision, so this approval is only ever for what you reviewed.</p>
+                </sheet>
+                <footer>
+                    <button name="action_approve" type="object" string="Approve &amp; Resolve"
+                            class="btn-primary" invisible="not can_approve"
+                            groups="clearpath_discharge.group_clearpath_pharmacist"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
+                    <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="pharmacy_approval_wizard_action" model="ir.actions.act_window">
+        <field name="name">Pharmacy Safety Review</field>
+        <field name="res_model">clearpath.pharmacy.approval.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="clearpath_pharmacy_wizard_view_form"/>
+        <field name="target">new</field>
+    </record>
+
+    <!-- ==================================================================== BILLING -->
+    <record id="clearpath_billing_wizard_view_form" model="ir.ui.view">
+        <field name="name">clearpath.billing.approval.wizard.form</field>
+        <field name="model">clearpath.billing.approval.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Surgical Billing Review" create="0" delete="0" duplicate="0">
+                <field name="discharge_id" invisible="1"/>
+                <field name="can_approve" invisible="1"/>
+                <field name="state" invisible="1"/>
+                <sheet class="o_clearpath_wizard o_cp_billing">
+                    <div class="o_cp_hero">
+                        <div class="o_cp_hero_icon"><i class="fa fa-calculator"/></div>
+                        <div class="o_cp_hero_text">
+                            <div class="o_cp_hero_title">Surgical Billing Review</div>
+                            <div class="o_cp_hero_sub">
+                                <field name="patient_name" class="d-inline"/> &#183;
+                                <field name="patient_code" class="d-inline"/> &#183; Bed
+                                <field name="bed_number" class="d-inline"/> &#183; Rev
+                                <field name="revision_id" class="d-inline"/>
+                            </div>
+                        </div>
+                        <div class="o_cp_hero_status">
+                            <field name="status" widget="badge"
+                                   decoration-warning="status == 'flagged' or status == 'stale'"
+                                   decoration-success="status == 'approved'"/>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning o_cp_alert" role="alert"
+                         invisible="total_unbilled == 0 or status == 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-exclamation-triangle"/> Unbilled supplies</div>
+                        Used in surgery but not billed yet. Enter the correct number in the <b>Billed</b> column.
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert"
+                         invisible="total_unbilled != 0 or status != 'pending'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Everything used is billed</div>
+                        Nothing left to reconcile. You can approve this revision.
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <field name="billing_officer_id" class="d-inline" options="{'no_open': True}"/> signed off on
+                        <field name="billing_approved_on" class="d-inline"/>
+                    </div>
+                    <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
+                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale check</div>
+                        The record changed after locking. Lock the revision again to re-run the checks.
+                    </div>
+                    <div class="alert alert-warning o_cp_alert" role="alert"
+                         invisible="not blocker_html or total_unbilled != 0">
+                        <field name="blocker_html" nolabel="1"/>
+                    </div>
+
+                    <div class="o_cp_tiles">
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">Used in surgery</span>
+                            <field name="total_used" nolabel="1"/>
+                        </div>
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">Billed</span>
+                            <field name="total_billed" nolabel="1"/>
+                        </div>
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">Unbilled</span>
+                            <field name="total_unbilled" nolabel="1"
+                                   decoration-danger="total_unbilled &gt; 0"
+                                   decoration-success="total_unbilled == 0"/>
+                        </div>
+                    </div>
+
+                    <div class="o_cp_card">
+                        <div class="o_cp_card_title">Surgical supply audit</div>
+                        <field name="line_ids" nolabel="1">
+                            <list editable="bottom" create="0" delete="0" decoration-danger="is_flagged">
+                                <field name="supply_line_id" column_invisible="True"/>
+                                <field name="item_name" readonly="1" force_save="1"/>
+                                <field name="surgical_qty_used" readonly="1" force_save="1"/>
+                                <field name="billed_qty" readonly="parent.status == 'approved' or parent.state == 'released'"/>
+                                <field name="discrepancy_qty"/>
+                                <field name="is_flagged" column_invisible="True"/>
+                            </list>
+                        </field>
+                    </div>
+                    <p class="o_cp_hint">Correcting a billed quantity never creates a new revision. Changing an
+                        item or the quantity used does, and that clears every sign-off.</p>
+                </sheet>
+                <footer>
+                    <button name="action_approve" type="object" string="Approve &amp; Resolve"
+                            class="btn-primary" invisible="not can_approve"
+                            groups="clearpath_discharge.group_clearpath_billing"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
+                    <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="billing_approval_wizard_action" model="ir.actions.act_window">
+        <field name="name">Surgical Billing Review</field>
+        <field name="res_model">clearpath.billing.approval.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="clearpath_billing_wizard_view_form"/>
+        <field name="target">new</field>
+    </record>
+
+    <!-- ================================================================== INSURANCE -->
+    <record id="clearpath_insurance_wizard_view_form" model="ir.ui.view">
+        <field name="name">clearpath.insurance.approval.wizard.form</field>
+        <field name="model">clearpath.insurance.approval.wizard</field>
+        <field name="arch" type="xml">
+            <form string="TPA Insurance Claim Review" create="0" delete="0" duplicate="0">
+                <field name="discharge_id" invisible="1"/>
+                <field name="can_approve" invisible="1"/>
+                <field name="state" invisible="1"/>
+                <sheet class="o_clearpath_wizard o_cp_insurance">
+                    <div class="o_cp_hero">
+                        <div class="o_cp_hero_icon"><i class="fa fa-shield"/></div>
+                        <div class="o_cp_hero_text">
+                            <div class="o_cp_hero_title">TPA Insurance Claim Review</div>
+                            <div class="o_cp_hero_sub">
+                                <field name="patient_name" class="d-inline"/> &#183;
+                                <field name="patient_code" class="d-inline"/> &#183; Bed
+                                <field name="bed_number" class="d-inline"/> &#183; Rev
+                                <field name="revision_id" class="d-inline"/>
+                            </div>
+                        </div>
+                        <div class="o_cp_hero_status">
+                            <field name="status" widget="badge"
+                                   decoration-warning="status == 'flagged' or status == 'stale'"
+                                   decoration-success="status == 'approved'"/>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning o_cp_alert" role="alert"
+                         invisible="not hold_html or status == 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-pause-circle"/> Claim on hold</div>
+                        <field name="hold_html" nolabel="1"/>
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert"
+                         invisible="hold_html or status != 'pending'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Claim ready for review</div>
+                        All discrepancies are reconciled. Check the codes and the claim below, then approve.
+                    </div>
+                    <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
+                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <field name="insurance_approver_id" class="d-inline" options="{'no_open': True}"/> signed off on
+                        <field name="insurance_approved_on" class="d-inline"/>
+                    </div>
+                    <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
+                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale claim</div>
+                        The record changed after locking. Lock the revision again to rebuild the claim.
+                    </div>
+                    <div class="alert alert-warning o_cp_alert" role="alert"
+                         invisible="not blocker_html or hold_html">
+                        <field name="blocker_html" nolabel="1"/>
+                    </div>
+
+                    <div class="o_cp_tiles">
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">ICD-10 / CPT</span>
+                            <field name="icd10_cpt_codes" nolabel="1" placeholder="Not mapped"/>
+                        </div>
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">TPA provider</span>
+                            <field name="tpa_provider" nolabel="1" placeholder="Missing"/>
+                        </div>
+                        <div class="o_cp_tile">
+                            <span class="o_cp_tile_label">Policy number</span>
+                            <field name="policy_number" nolabel="1" placeholder="Missing"/>
+                        </div>
+                    </div>
+
+                    <div class="o_cp_card">
+                        <div class="o_cp_card_title">Auto-filled TPA pre-authorization claim</div>
+                        <field name="tpa_claim_html" nolabel="1"/>
+                    </div>
+                    <p class="o_cp_hint">The claim text reflects the last verification run. Approval re-checks the
+                        current medications and supplies.</p>
+                </sheet>
+                <footer>
+                    <button name="action_approve" type="object" string="Approve &amp; Resolve"
+                            class="btn-primary" invisible="not can_approve"
+                            groups="clearpath_discharge.group_clearpath_admin"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary" invisible="status == 'approved'"/>
+                    <button string="Close" special="cancel" class="btn-secondary" invisible="status != 'approved'"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="insurance_approval_wizard_action" model="ir.actions.act_window">
+        <field name="name">TPA Insurance Claim Review</field>
+        <field name="res_model">clearpath.insurance.approval.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="clearpath_insurance_wizard_view_form"/>
+        <field name="target">new</field>
+    </record>
+</odoo>

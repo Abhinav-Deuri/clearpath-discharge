@@ -12,6 +12,7 @@
         "security/clearpath_security.xml",
         "security/ir.access.csv",
         "views/clearpath_report.xml",
+        "wizard/clearpath_wizards_views.xml",
         "views/clearpath_discharge_views.xml",
         "views/clearpath_patient_views.xml",
         "views/clearpath_menus.xml",
@@ -21,6 +22,7 @@
     'assets': {
         'web.assets_backend': [
             'clearpath_discharge/static/src/voice_recorder/voice_recorder.js',
+            'clearpath_discharge/static/src/scss/clearpath_wizards.scss',
         ],
     },
 }

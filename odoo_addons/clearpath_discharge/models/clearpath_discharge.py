@@ -156,6 +156,14 @@ class ClearpathDischarge(models.Model):
         string="Audit Report", compute='_compute_audit_report_html', sanitize=False,
     )
 
+    # --- Phase 6: numbers and labels shown on the smart (stat) buttons
+    pharmacy_conflict_count = fields.Integer(compute='_compute_stat_buttons')
+    unbilled_item_count = fields.Integer(compute='_compute_stat_buttons')
+    insurance_hold_count = fields.Integer(compute='_compute_stat_buttons')
+    pharmacy_button_text = fields.Char(compute='_compute_stat_buttons')
+    billing_button_text = fields.Char(compute='_compute_stat_buttons')
+    insurance_button_text = fields.Char(compute='_compute_stat_buttons')
+
     # ------------------------------------------------------------------ helpers
     @api.depends('tpa_claim_document')
     def _compute_tpa_claim_html(self):
@@ -180,6 +188,36 @@ class ClearpathDischarge(models.Model):
         qweb = self.env['ir.qweb']
         for rec in self:
             rec.audit_report_html = qweb._render('clearpath_discharge.audit_body', {'o': rec})
+
+    @staticmethod
+    def _stat_text(state, status, count, one, many):
+        if state == 'draft' and status != 'stale':
+            return "Not run"
+        if status == 'stale':
+            return "Stale"
+        if status == 'approved':
+            return "Approved"
+        return ("%d %s" % (count, one if count == 1 else many)) if count else "Clear"
+
+    @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
+                 'insurance_hold_reasons', 'medication_line_ids.is_flagged',
+                 'supply_line_ids.discrepancy_qty')
+    def _compute_stat_buttons(self):
+        for rec in self:
+            conflicts = len(rec.medication_line_ids.filtered('is_flagged'))
+            unbilled = len(rec.supply_line_ids.filtered(lambda s: s.discrepancy_qty > 0))
+            holds = len([l for l in (rec.insurance_hold_reasons or '').splitlines() if l.strip()])
+            rec.pharmacy_conflict_count = conflicts
+            rec.unbilled_item_count = unbilled
+            rec.insurance_hold_count = holds
+            rec.pharmacy_button_text = self._stat_text(
+                rec.state, rec.pharmacy_status, conflicts, "Allergy Flag", "Allergy Flags")
+            rec.billing_button_text = self._stat_text(
+                rec.state, rec.billing_status, unbilled, "Unbilled Item", "Unbilled Items")
+            text = self._stat_text(rec.state, rec.insurance_status, holds, "Hold", "Holds")
+            if text == "Clear" and rec.insurance_status == 'flagged':
+                text = "On Hold"
+            rec.insurance_button_text = text
 
     @api.depends('patient_id.patient_code')
     def _compute_name(self):
@@ -528,38 +566,6 @@ class ClearpathDischarge(models.Model):
         if self.state not in ('flagged', 'verifying'):
             raise UserError("Sign-off is only possible after verification of the current revision.")
 
-    def action_pharmacist_approve(self):
-        self.ensure_one()
-        self._require_group(GROUP_PHARMACIST, "Pharmacist")
-        self._assert_signable()
-        if self.pharmacy_status == 'stale':
-            raise UserError("Pharmacy check is stale. Re-verify the current revision first.")
-        if self.pharmacy_status != 'pending' or any(self.medication_line_ids.mapped('is_flagged')):
-            raise UserError(
-                "Unresolved pharmacy conflict. The prescriber must change the medication "
-                "(this creates a new revision) before sign-off.")
-        self.write({'pharmacy_status': 'approved', 'pharmacist_id': self.env.user.id,
-                    'pharmacy_approved_on': fields.Datetime.now()})
-        self.message_post(body="Pharmacist <b>%s</b> approved Rev %d." % (self.env.user.name, self.revision_id))
-        self._update_gate()
-        return self._soft_reload()
-
-    def action_billing_approve(self):
-        self.ensure_one()
-        self._require_group(GROUP_BILLING, "Billing Officer")
-        self._assert_signable()
-        if self.billing_status == 'stale':
-            raise UserError("Billing check is stale. Re-verify the current revision first.")
-        open_items = self.supply_line_ids.filtered(lambda s: s.discrepancy_qty > 0)
-        if open_items:
-            raise UserError("Unbilled items remain: %s. Correct the billed quantity first." % ", ".join(
-                "+%d %s" % (s.discrepancy_qty, s.item_name) for s in open_items))
-        self.write({'billing_status': 'approved', 'billing_officer_id': self.env.user.id,
-                    'billing_approved_on': fields.Datetime.now()})
-        self.message_post(body="Billing Officer <b>%s</b> approved Rev %d." % (self.env.user.name, self.revision_id))
-        self._update_gate()
-        return self._soft_reload()
-
     def _update_gate(self):
         """Open HITL gate #2 only when Pharmacy, Billing AND Insurance approved the SAME revision."""
         for rec in self:
@@ -648,7 +654,7 @@ class ClearpathDischarge(models.Model):
                 created += 1
         self.message_post(body="Nurse supply sheet scanned: %d line(s) updated, %d created." % (updated, created))
         return self._toast("Supply sheet scanned",
-                           "%d updated, %d new. Check the Surgical Billing Audit tab." % (updated, created))
+                           "%d updated, %d new. Open the Billing button to review." % (updated, created))
 
     # --------------------------------------- HITL gate #1 - insurance (admin) sign-off
     def _insurance_blockers(self):
@@ -666,22 +672,21 @@ class ClearpathDischarge(models.Model):
             out.append("TPA provider / policy number missing on the patient")
         return out
 
-    def action_admin_approve_insurance(self):
+    # ---------------------------------- Phase 6: smart buttons -> department pop-ups
+    def _open_wizard(self, xmlid):
         self.ensure_one()
-        self._require_group(GROUP_ADMIN, "Hospital Admin / Insurance Officer")
-        self._assert_signable()
-        if self.insurance_status == 'stale':
-            raise UserError("The insurance claim is stale. Re-verify the current revision first.")
-        blockers = self._insurance_blockers()
-        if blockers:
-            raise UserError("Cannot approve the TPA claim yet: " + "; ".join(blockers) + ".")
-        self.write({'insurance_status': 'approved', 'insurance_approver_id': self.env.user.id,
-                    'insurance_approved_on': fields.Datetime.now(),
-                    'insurance_hold_reasons': False})  # resolved: do not show stale holds on the packet
-        self.message_post(body="Insurance officer <b>%s</b> approved the TPA claim for Rev %d (%s)." % (
-            self.env.user.name, self.revision_id, self.icd10_cpt_codes))
-        self._update_gate()
-        return self._soft_reload()
+        action = self.env['ir.actions.act_window']._for_xml_id(xmlid)
+        action['context'] = {'default_discharge_id': self.id, 'dialog_size': 'large'}
+        return action
+
+    def action_open_pharmacy_wizard(self):
+        return self._open_wizard('clearpath_discharge.pharmacy_approval_wizard_action')
+
+    def action_open_billing_wizard(self):
+        return self._open_wizard('clearpath_discharge.billing_approval_wizard_action')
+
+    def action_open_insurance_wizard(self):
+        return self._open_wizard('clearpath_discharge.insurance_approval_wizard_action')
 
     # ----------------------------------------- HITL gate #2 - coordinator release
     def action_coordinator_release(self):

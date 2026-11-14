@@ -198,3 +198,60 @@ HITL checkpoints for you: after step 2 (review the generated TPA claim text), af
 - Large audio via Odoo Binary -> base64 -> sidecar adds latency; cap upload size (e.g. 10 MB audio, 5 MB image) with a clear error.
 - Extending `_compute_revision_hash` changes hashes of existing records; harmless (recomputed on next lock).
 - Spec's emoji in button labels kept as requested.
+
+---
+# Phase 6 — UI refactor: Smart Buttons + approval Wizards (pop-up cards)
+
+## Context
+The discharge form has 6 notebook tabs plus 3 header sign-off buttons. Pharmacy, Billing and Insurance review are buried in tabs on the clinical form. Goal: a clean clinical form (Clinical Draft + Audit Packet only) with a stat-button row (Pharmacy / Billing / Insurance) at top right. Each stat button opens a focused modal (`target="new"`) showing only that department's evidence and an "Approve & Resolve" footer. Gates, HITL rules and the Stale-Write Guard stay exactly as built; this is a UX move, not a logic change.
+
+## Decisions (flag if you disagree)
+1. **Approval logic moves into the wizards; shared helpers stay on the model.** `_require_group`, `_assert_signable`, `_insurance_blockers`, `_update_gate`, `_soft_reload` stay on `clearpath.discharge` and are reused. `action_pharmacist_approve`, `action_billing_approve`, `action_admin_approve_insurance` are removed from the model and re-implemented as `action_approve` on each wizard (same checks, same chatter text, same fields written, then `_update_gate()` and `soft_reload`).
+2. **Pharmacy wizard is read-only on medications.** Editing a medication bumps the revision (Stale-Write Guard), so the pharmacist reviews and approves; changes are made on the Clinical Draft. The Billing wizard lets billing edit `billed_qty` only (does not bump), as today.
+3. **Surgical supplies stay reachable from the main form.** Removing the Billing tab would hide the lines the nurse scan creates and the doctor edits. A compact "Surgical Supplies Used" list (item + used qty, editable in draft) goes under the medications on the Clinical Draft page. Billed qty is edited only in the Billing wizard.
+4. **Stat buttons show icon + count/label + coloured status badge**: "1 Allergy Flag" (red), "Clear" (green), "Stale" (amber), "Not run" (grey).
+
+## Part A — Wizards (`wizard/`, new)
+- `wizard/__init__.py` imports the three files; root `__init__.py` adds `from . import wizard`.
+- Common fields: `discharge_id` (Many2one, required, default from `context['default_discharge_id']`), related read-only `patient_id`, `bed_number`, `revision_id`, status; `can_approve` (Boolean compute) and `blocker_html` (Html compute) explain why approval is blocked.
+- `pharmacy_approval_wizard.py` (`clearpath.pharmacy.approval.wizard`): related `ai_draft_summary_html`, `medication_line_ids` (readonly), `allergy_ids` (readonly), `conflict_html` built from flagged lines (drug + `conflict_reason`), approver / approved-on when already signed. `action_approve`: `_require_group(GROUP_PHARMACIST)`, `_assert_signable`, stale check, unresolved-flag check, write `pharmacy_status/pharmacist_id/pharmacy_approved_on`, chatter, `_update_gate`, `soft_reload`.
+- `billing_approval_wizard.py` (`clearpath.billing.approval.wizard`): `supply_line_ids` = `related='discharge_id.supply_line_ids', readonly=False` (editable `billed_qty`; item / used readonly in the wizard list), computed used-vs-billed totals and open items. `action_approve` = existing billing logic. Fallback if a writable related One2many misbehaves in the web client: small transient line model (item, used, billed) written back on approve.
+- `insurance_approval_wizard.py` (`clearpath.insurance.approval.wizard`): `icd10_cpt_codes`, `tpa_provider`, `policy_number`, `insurance_hold_reasons`, `tpa_claim_html`, blockers from `_insurance_blockers()`. `action_approve` = existing insurance logic (clears hold reasons).
+- Transient models need no `ir.access.csv` rows; approval is gated in Python via `_require_group` and in the view via `groups=`.
+
+## Part B — Wizard views (`wizard/clearpath_wizards_views.xml`, new)
+- One form `ir.ui.view` + one `ir.actions.act_window` with `target="new"` per wizard (`pharmacy_approval_wizard_action`, ...).
+- Look: hero header (patient, bed, Rev badge, status badge) → prominent alert (`alert-danger` conflicts / `alert-warning` discrepancies / `alert-success` "All clear") → evidence card(s) → footer. Footer: **Approve & Resolve** (`btn-primary`, `invisible="not can_approve"`, `groups=` for that department) and **Cancel** (`special="cancel"`; reads "Close" once approved).
+- `static/src/scss/clearpath_wizards.scss` in `web.assets_backend`: rounded cards, soft shadow, colour-coded left border per department, tidy hero row. Built on Odoo bootstrap variables so light/dark follow the theme.
+
+## Part C — Main model (`models/clearpath_discharge.py`)
+- New non-stored computes: `pharmacy_conflict_count` (flagged med lines), `unbilled_item_count` (supply lines with `discrepancy_qty > 0`), `insurance_hold_count` (non-empty lines of `insurance_hold_reasons`), plus `pharmacy_button_text`, `billing_button_text`, `insurance_button_text` ("1 Allergy Flag", "2 Unbilled", "Clear", "Approved", "Stale", "Not run"). `@api.depends` on lines, statuses, hold reasons.
+- Opener methods `action_open_pharmacy_wizard`, `action_open_billing_wizard`, `action_open_insurance_wizard`: load the `target="new"` act_window via `self.env['ir.actions.act_window']._for_xml_id(...)`, set `context={'default_discharge_id': self.id}`.
+- Update messages that say "see the X tab" to point at the matching button.
+
+## Part D — Main form (`views/clearpath_discharge_views.xml`)
+- Remove header buttons: Pharmacist Sign-off, Billing Sign-off, Admin: Approve Insurance. Keep Generate Draft, Lock & Run Checks, Release, Simulate Late Edit, Reset Demo, PDF.
+- Remove notebook pages: Pharmacy Safety Check, Surgical Billing Audit, Insurance & TPA Pre-Auth. Keep Clinical Draft (+ supplies list) and Audit Packet.
+- Add `<div class="oe_button_box" name="button_box">` at the top of `<sheet>` with three `oe_stat_button`s (`type="object"`, `invisible="state == 'draft'"`): `fa-medkit` Pharmacy, `fa-calculator` Billing, `fa-shield` Insurance; each shows count/label, `o_stat_text`, and the coloured status badge.
+- The red/amber banners stay as a summary strip, with copy updated to "Open the Pharmacy / Billing / Insurance button". Multimodal Bedside Inputs, hero badges and token-savings banner unchanged.
+
+## Part E — Manifest, tests, docs
+- `__manifest__.py` data order: security, `security/ir.access.csv`, `views/clearpath_report.xml`, **`wizard/clearpath_wizards_views.xml`**, discharge views, patient views, menus, demo data; scss added to `assets`.
+- `tests/test_discharge_flow.py` (12 call sites of the old approve methods): route sign-offs through the wizards (`create({'discharge_id': ...}).action_approve()`). New tests: openers return `target == 'new'`; smart-button counts/labels (flag, unbilled, clear, stale); `can_approve` false while flagged; non-department users blocked; billed-qty edit in billing wizard does not bump revision.
+- `DEMO.md` click path ("click Pharmacy / Billing / Insurance, then Approve & Resolve") and `PLAN.md` updated.
+
+## Verification
+1. Upgrade DB: `docker compose run --rm odoo odoo -d clearpath -u clearpath_discharge --stop-after-init --no-http`; no XML/validation errors.
+2. Odoo tests in a scratch DB (`MSYS_NO_PATHCONV=1 ... --test-enable --test-tags /clearpath_discharge`, then drop it); sidecar `pytest` still 21 pass.
+3. Shell sanity check: `get_view` on the form and each wizard succeeds; each opener returns `ir.actions.act_window`, `target=new`, right `res_model` and context; full flow (lock → three wizard approvals → release) passes.
+4. Browser pass on PT-402: stat buttons appear after locking, each opens a floating card, Approve & Resolve closes it and refreshes badges. The Chrome extension was not connected last time; if it still isn't, I'll say the visual pass is unverified and list what to click.
+
+## Risks
+- Writable related One2many in the billing wizard (fallback above).
+- Odoo 20 view quirks (`<list>`, `invisible=` expressions, no `attrs`) — caught by steps 1 and 3.
+- Removing the old model methods: only tests and the three form buttons call them.
+
+### Phase 6 as built
+- Billing pop-up uses a small transient line model (`clearpath.billing.approval.line`) instead of a writable related One2many: Odoo drops row edits on a related x2many at create time. The Billed column is copied back to the supply lines on **Approve & Resolve** (never bumps the revision).
+- Odoo 20 needs `ir.access.csv` rows for transient models too (3 wizards + the line model, 6 groups each).
+- Verified: 24 Odoo tests, full shell flow through the three pop-ups, all four views compile. Not click-tested in a browser.
