@@ -470,6 +470,8 @@ class TestDischargeFlow(TransactionCase):
             self.assertIn(needle, html)
         self.assertNotIn('---', html)
         self.assertNotIn('**', html)
+        self.assertIn('text-danger fw-bold', html)  # allergy value
+        self.assertIn('text-muted fw-bold small text-uppercase', html)  # field labels
         self.assertNotIn('---', clean_summary_text(sample))
         self.assertIn('Just a plain note.', str(summary_to_html("Just a plain note.")))
         bare = str(summary_to_html("Discharge Summary\n- **Patient**: PT-1\n- **Plan**: home"))

@@ -59,14 +59,14 @@ export class VoiceRecorderField extends Component {
     static template = xml`
         <div class="o_clearpath_voice d-flex flex-column gap-2">
             <div class="d-flex flex-wrap align-items-center gap-2">
-                <button type="button" class="btn btn-danger" t-if="!this.state.recording"
+                <button type="button" class="btn btn-light border" t-if="!this.state.recording"
                         t-on-click="this.startRecording" t-att-disabled="this.props.readonly or this.state.busy">
-                    &#127908; Record voice note
+                    <i class="oi text-danger me-2" data-icon="mic"/>Record voice note
                 </button>
-                <button type="button" class="btn btn-warning" t-if="this.state.recording" t-on-click="this.stopRecording">
-                    &#9209; Stop (<t t-out="this.state.seconds"/>s)
+                <button type="button" class="btn btn-light border" t-if="this.state.recording" t-on-click="this.stopRecording">
+                    <i class="oi text-danger me-2 cp-beat-fade" data-icon="stop"/>Stop (<t t-out="this.state.seconds"/>s)
                 </button>
-                <label class="btn btn-secondary mb-0" t-if="!this.state.recording and !this.props.readonly">
+                <label class="btn btn-light border mb-0" t-if="!this.state.recording and !this.props.readonly">
                     Upload audio file
                     <input type="file" accept="audio/*" class="d-none" t-on-change="this.onFile"/>
                 </label>

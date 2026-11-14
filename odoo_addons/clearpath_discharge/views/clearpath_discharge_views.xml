@@ -287,7 +287,7 @@
                                         <field name="voice_note_audio" filename="voice_note_filename" widget="wav_recorder" nolabel="1"/>
                                         <field name="voice_note_filename" invisible="1"/>
                                         <button name="action_transcribe_voice_and_draft" type="object"
-                                                string="&#127897;&#65039; Transcribe Voice &amp; Draft" class="btn-secondary mt-2"
+                                                string="&#127897;&#65039; Transcribe Voice &amp; Draft" class="btn-light border mt-2"
                                                 invisible="not voice_note_audio"
                                                 groups="clearpath_discharge.group_clearpath_doctor"/>
                                     </div>
@@ -308,7 +308,7 @@
                                                    options="{'size': [0, 140]}" readonly="state != 'draft'"/>
                                         </div>
                                         <button name="action_scan_nurse_checklist" type="object"
-                                                string="&#128247; Scan Nurse Supply Sheet" class="btn-secondary"
+                                                string="&#128247; Scan Nurse Supply Sheet" class="btn-light border"
                                                 invisible="not nurse_checklist_image or state != 'draft'"
                                                 groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_nurse"/>
                                     </div>
@@ -321,18 +321,18 @@
                     </div>
 
                     <!-- Section 2: structured AI discharge summary -->
-                    <div class="card shadow-sm border border-info-subtle rounded-3 bg-info bg-opacity-10 p-3 mb-4">
+                    <div class="card shadow-sm border border-primary-subtle rounded-3 bg-primary bg-opacity-10 p-3 mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
-                                <div class="text-uppercase fw-bold text-muted small">Structured AI Discharge Summary</div>
-                                <h4 class="fw-bold mb-0 mt-1"><i class="oi text-primary me-2" data-icon="flash_on"/>Discharge Summary</h4>
+                                <div class="text-uppercase fw-bold text-primary small">Structured AI Discharge Summary</div>
+                                <h4 class="fw-bold mb-0 mt-1 text-dark"><i class="oi text-primary me-2" data-icon="flash_on"/>Discharge Summary</h4>
                             </div>
                             <a role="button" class="btn btn-light border btn-sm" data-bs-toggle="collapse"
                                data-bs-target="#cp_edit_summary" invisible="state == 'released'">
                                 <i class="oi" data-icon="edit"/> Edit summary text
                             </a>
                         </div>
-                        <div class="bg-white rounded-3 border p-0 overflow-hidden" invisible="not ai_draft_summary">
+                        <div class="bg-white rounded-3 shadow-sm p-0 overflow-hidden" invisible="not ai_draft_summary">
                             <field name="ai_draft_summary_html" nolabel="1"/>
                         </div>
                         <p class="text-muted mb-0" invisible="ai_draft_summary">

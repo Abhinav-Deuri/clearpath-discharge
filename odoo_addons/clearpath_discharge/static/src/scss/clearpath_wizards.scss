@@ -4,46 +4,50 @@
     --cp-a: #0f766e;
     --cp-b: #14b8a6;
 
-    &.o_cp_pharmacy { --cp-a: #0f766e; --cp-b: #14b8a6; }
-    &.o_cp_billing { --cp-a: #3730a3; --cp-b: #6366f1; }
-    &.o_cp_insurance { --cp-a: #6d28d9; --cp-b: #a78bfa; }
-    &.o_cp_alerts { --cp-a: #b45309; --cp-b: #f59e0b; }
+    &.o_cp_pharmacy { --cp-a: #1d4ed8; --cp-b: #60a5fa; }
+    &.o_cp_billing { --cp-a: #475569; --cp-b: #94a3b8; }
+    &.o_cp_insurance { --cp-a: #4338ca; --cp-b: #818cf8; }
+    &.o_cp_alerts { --cp-a: #b45309; --cp-b: #fbbf24; }
 
+    // Clinical-trust header: pale tint, dark text, one accent colour (no solid saturated blocks).
     .o_cp_hero {
         display: flex;
         align-items: center;
         gap: 14px;
-        padding: 16px 18px;
+        padding: 14px 16px;
         margin-bottom: 14px;
-        border-radius: 14px;
-        color: #fff;
-        background: linear-gradient(135deg, var(--cp-a), var(--cp-b));
-        box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+        border-radius: 12px;
+        color: var(--bs-body-color);
+        background: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+        border-left: 5px solid var(--cp-b);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
 
         .o_cp_hero_icon {
             display: flex;
             align-items: center;
             justify-content: center;
             flex: 0 0 auto;
-            width: 46px;
-            height: 46px;
+            width: 44px;
+            height: 44px;
             border-radius: 12px;
             font-size: 22px;
-            background: rgba(255, 255, 255, .2);
+            color: var(--cp-a);
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
         }
         .o_cp_hero_text { flex: 1 1 auto; min-width: 0; }
-        .o_cp_hero_title { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+        .o_cp_hero_title { font-size: 1.1rem; font-weight: 700; line-height: 1.2; color: var(--bs-emphasis-color); }
         .o_cp_hero_sub {
             margin-top: 2px;
             font-size: .85rem;
-            opacity: .92;
-            .o_field_widget { color: #fff; }
+            color: var(--bs-secondary-color);
+            .o_field_widget { color: inherit; }
         }
         .o_cp_hero_status .badge {
             font-size: .8rem;
             padding: .45em .8em;
             border-radius: 999px;
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, .55);
         }
     }
 

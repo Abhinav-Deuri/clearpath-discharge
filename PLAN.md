@@ -317,3 +317,8 @@ Problem: `ai_draft_summary` is stored as markdown and shown raw in a plain `Text
 - Root cause of repeated supply lines: Reset Demo deleted the demo lines, then every module upgrade re-created them from the `noupdate` demo XML (deleted XML ids come back). Demo content now lives only in `DEMO_NOTE_TEMPLATE` / `DEMO_MEDICATIONS` / `DEMO_SUPPLIES` (Python), seeded by `_seed_demo_content()` (install hook + Reset Demo, idempotent, single-flight locked). Demo XML keeps only patient, allergy and discharge. A supply item can appear once per discharge (case-insensitive constraint).
 - The demo patient is "Arabith"; the note is built from the patient's real name and bed, so a rename can never leave a stale name.
 - Phase 10 layout: prioritized header (primary Generate AI Draft / Lock / Invoice / Release, muted utility buttons), Patient & Governance banner (short `#hash` pill, gate locked/unlocked pill), boxed cards for Multimodal Bedside Inputs (handoff note inside the voice card) and the Structured AI Discharge Summary (single heading), department smart buttons with their own icon and state colour.
+
+### Phase 11 as built ("Clinical Trust" palette)
+- Voice recorder buttons are neutral (`btn-light border`) with only the microphone icon red; Transcribe / Scan buttons likewise.
+- Summary card: pale blue (`bg-primary bg-opacity-10`, `border-primary-subtle`) with a white `shadow-sm` inner panel; labels `text-muted fw-bold small text-uppercase`; allergy values `text-danger fw-bold`.
+- Red is reserved for conflicts and the Gate Locked pill. Pop-up headers are now a calm tinted panel with a single accent colour (blue pharmacy, slate billing, indigo insurance, amber alerts) instead of solid gradients.

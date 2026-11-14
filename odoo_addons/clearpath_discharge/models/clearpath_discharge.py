@@ -164,11 +164,13 @@ def summary_to_html(text):
         icon = next((ic for k, ic in _SUMMARY_ICONS if k in key), 'chevron_right')
         alert = 'allerg' in key
         body.append(
-            '<tr style="%s">%s<td style="width:140px; padding:9px 10px; vertical-align:top; font-size:11px; '
-            'font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280;">%s</td>'
-            '<td style="padding:9px 14px 9px 0; vertical-align:top;%s">%s</td></tr>'
+            '<tr style="%s">%s<td class="text-muted fw-bold small text-uppercase" style="width:140px; '
+            'padding:9px 10px; vertical-align:top; font-size:11px; font-weight:700; text-transform:uppercase; '
+            'letter-spacing:.05em; color:#6b7280;">%s</td>'
+            '<td class="%s" style="padding:9px 14px 9px 0; vertical-align:top;%s">%s</td></tr>'
             % (border, td_icon % ('#dc3545' if alert else '#0d6efd', icon), escape(label),
-               ' color:#dc3545; font-weight:600;' if alert else '', value))
+               'text-danger fw-bold' if alert else '',
+               ' color:#dc3545; font-weight:700;' if alert else '', value))
 
     head = ''
     # The form puts "Discharge Summary" in its own card header; other places keep the card title.
