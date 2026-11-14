@@ -6,9 +6,12 @@ so a demo never hangs. Audio/image bytes are never logged.
 """
 import base64
 import binascii
+import io
+import asyncio
 import json
 import logging
 import re
+import wave
 
 import httpx
 
@@ -55,9 +58,32 @@ def decode_payload(data_b64: str, max_bytes: int, what: str) -> bytes:
     return raw
 
 
+def _riva_live() -> bool:
+    return (not settings.use_mock_llm) and bool(settings.asr_riva_function_id and settings.asr_api_key)
+
+
 def _asr_live() -> bool:
     return (not settings.use_mock_llm) and bool(
         settings.asr_base_url and settings.asr_api_key and settings.asr_model_name)
+
+
+def _riva_transcribe_sync(audio: bytes) -> str:
+    """Blocking NVIDIA Riva (hosted Parakeet) offline recognition. Needs PCM WAV."""
+    import riva.client as rc  # lazy: only needed when Riva is configured
+
+    auth = rc.Auth(
+        uri=settings.asr_riva_server, use_ssl=True,
+        metadata_args=[["function-id", settings.asr_riva_function_id],
+                       ["authorization", f"Bearer {settings.asr_api_key}"]],
+    )
+    cfg = rc.RecognitionConfig(language_code=settings.asr_language_code, max_alternatives=1,
+                               enable_automatic_punctuation=True)
+    with wave.open(io.BytesIO(audio)) as wav:  # raises wave.Error for non-WAV uploads
+        cfg.sample_rate_hertz = wav.getframerate()
+        cfg.audio_channel_count = wav.getnchannels()
+    resp = rc.ASRService(auth).offline_recognize(audio, cfg)
+    return " ".join(r.alternatives[0].transcript.strip()
+                    for r in resp.results if r.alternatives).strip()
 
 
 def _vision_live() -> bool:
@@ -66,9 +92,18 @@ def _vision_live() -> bool:
 
 
 async def transcribe_doctor_voice_note(audio_base64: str, filename: str) -> str:
-    """Audio -> text. Live: Whisper-style POST {ASR_BASE_URL}/audio/transcriptions."""
+    """Audio -> text. Live: NVIDIA Riva gRPC (WAV) if ASR_RIVA_FUNCTION_ID set, else Whisper-style REST."""
     audio = decode_payload(audio_base64, MAX_AUDIO_BYTES, "Audio")
-    if _asr_live():
+    if _riva_live():
+        try:
+            text = await asyncio.wait_for(asyncio.to_thread(_riva_transcribe_sync, audio),
+                                          timeout=settings.ai_timeout_seconds * 3)
+            if text:
+                return text
+            log.warning("Riva ASR returned empty text; using demo transcript")
+        except Exception as exc:  # never hang the demo
+            log.warning("Riva ASR failed (%s); using demo transcript", type(exc).__name__)
+    elif _asr_live():
         try:
             async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds * 3) as client:
                 resp = await client.post(
@@ -108,7 +143,10 @@ async def extract_supply_checklist_from_image(image_base64: str) -> list[SupplyI
                     {"type": "image_url", "image_url": {"url": data_uri}},
                 ]}],
                 "temperature": 0,
+                "max_tokens": 2000,
             }
+            if "nvidia.com" in settings.vision_base_url:  # skip reasoning trace: faster, content never empty
+                body["chat_template_kwargs"] = {"enable_thinking": False}
             async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds * 2) as client:
                 resp = await client.post(
                     settings.vision_base_url.rstrip("/") + "/chat/completions",

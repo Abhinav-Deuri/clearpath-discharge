@@ -5,8 +5,9 @@
 2. Pick the AI mode: `.\demo-mode.ps1 live` (real AI, ~12 s per draft) or `.\demo-mode.ps1 mock` (instant, safe on bad Wi-Fi).
 3. Open http://localhost:8069 (admin / admin) -> ClearPath Discharge -> Discharges -> **PT-402 Discharge**.
 4. If it is not a clean Rev 1 draft: click **Reset Demo**.
-5. Have any small audio file (.wav/.mp3) and any image (.png/.jpg) ready. Voice and photo scan run in demo mode unless
-   `ASR_*` / `VISION_*` are set in `.env`, so **any** file works and returns the PT-402 demo transcript and supply counts.
+5. Voice and photo scan are LIVE when `.env` has the `ASR_*` / `VISION_*` values (NVIDIA Riva Parakeet + Nemotron VL).
+   Voice needs a **.wav** file (other formats fall back to the demo transcript). Any image works for the scan.
+   With `.\demo-mode.ps1 mock`, or blank `ASR_*` / `VISION_*`, any file returns the PT-402 demo transcript and counts.
 
 The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, Insurance Officer, Coordinator), so every button is on one screen.
 
@@ -37,8 +38,9 @@ The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, In
 
 **URLs**: Odoo http://localhost:8069 | Sidecar docs http://localhost:8000/docs
 
-**Real ASR / vision (optional):** set `ASR_BASE_URL/ASR_API_KEY/ASR_MODEL_NAME` (Whisper-style `/audio/transcriptions`) and
-`VISION_BASE_URL/VISION_API_KEY/VISION_MODEL_NAME` (vision chat/completions) in `.env`, then `docker compose up -d sidecar_service`.
+**Live ASR / vision:** set `ASR_API_KEY` + `ASR_RIVA_FUNCTION_ID` (hosted Riva gRPC, WAV only; `ASR_RIVA_SERVER`,
+`ASR_LANGUAGE_CODE` optional) or a Whisper-style `ASR_BASE_URL/ASR_MODEL_NAME`; and `VISION_BASE_URL/VISION_API_KEY/VISION_MODEL_NAME`
+(vision chat/completions). Then `docker compose up -d --build sidecar_service`. Any live failure falls back to the demo result.
 Audio and photos are real patient data: use a provider you are cleared to send it to.
 
 **Role logins (optional):** Settings -> Users, give a user one ClearPath role. Each only sees their own buttons.
