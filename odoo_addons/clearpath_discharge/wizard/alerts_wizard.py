@@ -23,13 +23,14 @@ class ClearpathAlertsWizard(models.TransientModel):
         for wiz in self:
             cards = [
                 Markup('<div class="alert alert-%s o_cp_alert d-flex align-items-start" role="alert">'
-                       '<i class="fa fa-2x %s me-3"/><div><div class="o_cp_alert_title">%s</div>%s</div></div>')
-                % (level, icon, title, text)
+                       '<i class="oi oi-2x %s me-3" data-icon="%s"/><div><div class="o_cp_alert_title">%s</div>%s'
+                       '</div></div>')
+                % (level, icon[1], icon[0], title, text)
                 for level, icon, title, text in wiz.discharge_id._alert_items()
             ]
             wiz.alerts_html = Markup('').join(cards) if cards else Markup(
                 '<div class="alert alert-success o_cp_alert" role="alert">'
-                '<div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Nothing needs attention</div>'
+                '<div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Nothing needs attention</div>'
                 '</div>')
 
     def action_open_pharmacy(self):

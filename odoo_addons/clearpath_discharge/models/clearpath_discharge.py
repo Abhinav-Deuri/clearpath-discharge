@@ -81,9 +81,9 @@ _ROW_RE = re.compile(r'^(?:[-*\u2022]\s+)?\*\*(.+?)\*\*\s*:?\s*(.*)$')
 _SUB_BULLET_RE = re.compile(r'^\s*[-*\u2022]\s+(?!\*\*)(.*)$')
 _HEADING_RE = re.compile(r'^#{1,6}\s+(.*)$')
 _SUMMARY_ICONS = (
-    ('patient', 'fa-user'), ('procedure', 'fa-scissors'), ('condition', 'fa-scissors'),
-    ('course', 'fa-heartbeat'), ('incision', 'fa-medkit'), ('plan', 'fa-home'),
-    ('medication', 'fa-flask'), ('allerg', 'fa-exclamation-circle'), ('follow', 'fa-calendar'),
+    ('patient', 'person'), ('procedure', 'content_cut'), ('condition', 'content_cut'),
+    ('course', 'favorite'), ('incision', 'medical_services'), ('plan', 'home'),
+    ('medication', 'science'), ('allerg', 'error'), ('follow', 'history'),
 )
 
 
@@ -126,7 +126,7 @@ def summary_to_html(text):
             rows.append({'plain': re.sub(r'^[-*\u2022]\s+', '', line)})
 
     td_icon = ('<td style="width:34px; padding:9px 0 9px 14px; vertical-align:top; text-align:center; '
-               'color:%s;"><i class="fa %s"/></td>')
+               'color:%s;"><i class="oi" data-icon="%s"/></td>')
     border = 'border-top:1px solid rgba(128,128,128,.25);'
     body = []
     for r in rows:
@@ -148,10 +148,10 @@ def summary_to_html(text):
             body.append(
                 '<tr style="%s"><td colspan="3" style="padding:10px 14px;"><div style="border-left:4px solid #f59e0b; '
                 'background:rgba(245,158,11,.14); border-radius:6px; padding:8px 12px;"><b>'
-                '<i class="fa fa-exclamation-triangle" style="color:#d97706;"/> %s</b><div style="margin-top:3px;">%s'
+                '<i class="oi" data-icon="warning" style="color:#d97706;"/> %s</b><div style="margin-top:3px;">%s'
                 '</div></div></td></tr>' % (border, escape(label), value))
             continue
-        icon = next((ic for k, ic in _SUMMARY_ICONS if k in key), 'fa-angle-right')
+        icon = next((ic for k, ic in _SUMMARY_ICONS if k in key), 'chevron_right')
         alert = 'allerg' in key
         body.append(
             '<tr style="%s">%s<td style="width:140px; padding:9px 10px; vertical-align:top; font-size:11px; '
@@ -163,7 +163,7 @@ def summary_to_html(text):
     head = ''
     if title:
         head = ('<div style="padding:10px 14px; font-weight:700; font-size:15px; background:rgba(13,110,253,.10);">'
-                '<i class="fa fa-file-text-o" style="color:#0d6efd;"/> %s</div>' % escape(title))
+                '<i class="oi" data-icon="description" style="color:#0d6efd;"/> %s</div>' % escape(title))
     return Markup(
         '<div style="border:1px solid rgba(128,128,128,.35); border-radius:10px; overflow:hidden; font-size:13px;">'
         '%s<table style="width:100%%; border-collapse:collapse;">%s</table></div>' % (head, ''.join(body)))
@@ -327,26 +327,26 @@ class ClearpathDischarge(models.Model):
         self.ensure_one()
         items = []
         if self.pharmacy_status == 'flagged':
-            items.append(('danger', 'fa-exclamation-triangle fa-pulse', "Pharmacy safety conflict",
+            items.append(('danger', ('warning', 'cp-pulse'), "Pharmacy safety conflict",
                           "%s Open the Pharmacy button for details. Change the medication to create a "
                           "new revision, then re-run checks." % (self.pharmacy_summary or "")))
         if self.billing_status == 'flagged':
-            items.append(('warning', 'fa-exclamation-circle fa-shake', "Surgical billing discrepancy",
+            items.append(('warning', ('error', 'cp-shake'), "Surgical billing discrepancy",
                           "%s Open the Billing button, correct the billed quantities, then sign off."
                           % (self.billing_summary or "")))
         if self.insurance_status == 'flagged':
-            items.append(('warning', 'fa-pause-circle fa-beat', "TPA insurance claim on hold",
+            items.append(('warning', ('pause_circle', 'cp-beat'), "TPA insurance claim on hold",
                           "Open the Insurance button. The claim is released for admin sign-off only after "
                           "every discrepancy is reconciled."))
         if 'stale' in (self.pharmacy_status, self.billing_status, self.insurance_status):
-            items.append(('secondary', 'fa-refresh', "Stale-Write Guard",
+            items.append(('secondary', ('refresh', ''), "Stale-Write Guard",
                           "The record was edited after locking. The previous checks and sign-offs are "
                           "invalid. Lock this revision again to re-verify."))
         if self.state == 'cleared' and not self.coordinator_gate_locked:
-            items.append(('success', 'fa-unlock-alt fa-beat', "Release gate open",
+            items.append(('success', ('lock_open', 'cp-beat'), "Release gate open",
                           "Pharmacy, Billing and Insurance all approved this revision."))
         if self.token_savings_summary:
-            items.append(('info', 'fa-bolt', "Token savings before AI call", self.token_savings_summary))
+            items.append(('info', ('flash_on', ''), "Token savings before AI call", self.token_savings_summary))
         return items
 
     @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',

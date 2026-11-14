@@ -24,7 +24,7 @@ The admin login holds every role (Doctor, Pharmacist, Billing Officer, Nurse, In
 
 **Bonus (Invoicing + Contacts):** after the Billing sign-off, type a **Unit Price** for each item in the Billing pop-up, then click **Generate Final Invoice** (header). The new **Invoice** smart button opens a draft customer invoice for John Doe's Contact record (Contacts app).
 
-**What the icons mean:** each department button shows a spinning grey gear (checks pending), a pulsing red exclamation (needs attention), a green shield (approved) or an amber refresh (stale). Ribbons: red *Allergy Hold*, green *Cleared*, green *Released* (the status bar hides once released).
+**What the icons mean:** each department button shows a spinning grey gear (checks pending), a pulsing red exclamation (needs attention), a green shield (approved) or an amber refresh (stale). Ribbons: red *Allergy Hold*, green *Cleared*, green *Released* (the status bar hides once released). Icons use Odoo 20's Material Symbols (`<i class="oi" data-icon="name"/>`), not Font Awesome.
 
 **After the demo:** click **Reset Demo** to go back to a clean Rev 1.
 

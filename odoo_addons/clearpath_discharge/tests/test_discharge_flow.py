@@ -465,7 +465,7 @@ class TestDischargeFlow(TransactionCase):
             "- **Items for clinician review**: Amoxicillin <script>x</script>\n---\n"
             "- **Follow-up**: Surgical clinic in 2 weeks")
         html = str(summary_to_html(sample))
-        for needle in ('Discharge Summary', 'fa-user', 'fa-calendar', '#dc3545', 'fa-exclamation-triangle',
+        for needle in ('Discharge Summary', 'data-icon="person"', 'data-icon="history"', '#dc3545', 'data-icon="warning"',
                        '&lt;script&gt;'):
             self.assertIn(needle, html)
         self.assertNotIn('---', html)
@@ -474,7 +474,7 @@ class TestDischargeFlow(TransactionCase):
         self.assertIn('Just a plain note.', str(summary_to_html("Just a plain note.")))
         bare = str(summary_to_html("Discharge Summary\n- **Patient**: PT-1\n- **Plan**: home"))
         self.assertIn('Discharge Summary', bare)
-        self.assertIn('fa-file-text-o', bare)  # first bare line became the card title
+        self.assertIn('data-icon="description"', bare)  # first bare line became the card title
 
     def test_30_top_alert_ribbons_and_icon_buttons(self):
         d = self._locked()
@@ -482,8 +482,8 @@ class TestDischargeFlow(TransactionCase):
         self.assertEqual(d.top_alert_title, 'Penicillin Allergy Conflict')
         arch = self.env['clearpath.discharge'].get_view(
             self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
-        for needle in ('Allergy Hold', 'Cleared', 'fa-cog fa-spin', 'fa-beat-fade', 'fa-shield text-success',
-                       'fa-pulse', 'action_generate_invoice', 'action_view_invoice'):
+        for needle in ('Allergy Hold', 'Cleared', 'oi-spin', 'cp-beat-fade', 'data-icon="security"',
+                       'cp-pulse', 'action_generate_invoice', 'action_view_invoice'):
             self.assertIn(needle, arch)
         self.assertEqual(arch.count('name="action_open_pharmacy_wizard"'), 4)
         self.assertEqual(arch.count('name="action_open_billing_wizard"'), 4)

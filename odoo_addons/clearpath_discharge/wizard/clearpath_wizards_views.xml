@@ -10,7 +10,7 @@
                 <field name="state" invisible="1"/>
                 <sheet class="o_clearpath_wizard o_cp_pharmacy">
                     <div class="o_cp_hero">
-                        <div class="o_cp_hero_icon"><i class="fa fa-medkit"/></div>
+                        <div class="o_cp_hero_icon"><i class="oi" data-icon="medical_services"/></div>
                         <div class="o_cp_hero_text">
                             <div class="o_cp_hero_title">Pharmacy Safety Review</div>
                             <div class="o_cp_hero_sub">
@@ -30,21 +30,21 @@
 
                     <div class="alert alert-danger o_cp_alert" role="alert"
                          invisible="not conflict_html or status == 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-exclamation-triangle"/> Allergy conflict detected</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="warning"/> Allergy conflict detected</div>
                         <field name="conflict_html" nolabel="1"/>
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert"
                          invisible="conflict_html or status != 'pending'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> No allergy conflicts found</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> No allergy conflicts found</div>
                         Review the draft and medications below, then approve this revision.
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Approved</div>
                         <field name="pharmacist_id" class="d-inline" options="{'no_open': True}"/> signed off on
                         <field name="pharmacy_approved_on" class="d-inline"/>
                     </div>
                     <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
-                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale check</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="refresh"/> Stale check</div>
                         The record changed after locking. Lock the revision again to re-run the checks.
                     </div>
                     <div class="alert alert-warning o_cp_alert" role="alert" invisible="not blocker_html">
@@ -110,7 +110,7 @@
                 <field name="state" invisible="1"/>
                 <sheet class="o_clearpath_wizard o_cp_billing">
                     <div class="o_cp_hero">
-                        <div class="o_cp_hero_icon"><i class="fa fa-calculator"/></div>
+                        <div class="o_cp_hero_icon"><i class="oi" data-icon="calculate"/></div>
                         <div class="o_cp_hero_text">
                             <div class="o_cp_hero_title">Surgical Billing Review</div>
                             <div class="o_cp_hero_sub">
@@ -129,21 +129,21 @@
 
                     <div class="alert alert-warning o_cp_alert" role="alert"
                          invisible="total_unbilled == 0 or status == 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-exclamation-triangle"/> Unbilled supplies</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="warning"/> Unbilled supplies</div>
                         Used in surgery but not billed yet. Enter the correct number in the <b>Billed</b> column, and the <b>Unit Price</b> for the invoice.
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert"
                          invisible="total_unbilled != 0 or status != 'pending'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Everything used is billed</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Everything used is billed</div>
                         Nothing left to reconcile. You can approve this revision.
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Approved</div>
                         <field name="billing_officer_id" class="d-inline" options="{'no_open': True}"/> signed off on
                         <field name="billing_approved_on" class="d-inline"/>
                     </div>
                     <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
-                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale check</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="refresh"/> Stale check</div>
                         The record changed after locking. Lock the revision again to re-run the checks.
                     </div>
                     <div class="alert alert-warning o_cp_alert" role="alert"
@@ -215,7 +215,7 @@
                 <field name="state" invisible="1"/>
                 <sheet class="o_clearpath_wizard o_cp_insurance">
                     <div class="o_cp_hero">
-                        <div class="o_cp_hero_icon"><i class="fa fa-shield"/></div>
+                        <div class="o_cp_hero_icon"><i class="oi" data-icon="security"/></div>
                         <div class="o_cp_hero_text">
                             <div class="o_cp_hero_title">TPA Insurance Claim Review</div>
                             <div class="o_cp_hero_sub">
@@ -234,21 +234,21 @@
 
                     <div class="alert alert-warning o_cp_alert" role="alert"
                          invisible="not hold_html or status == 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-pause-circle"/> Claim on hold</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="pause_circle"/> Claim on hold</div>
                         <field name="hold_html" nolabel="1"/>
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert"
                          invisible="hold_html or status != 'pending'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Claim ready for review</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Claim ready for review</div>
                         All discrepancies are reconciled. Check the codes and the claim below, then approve.
                     </div>
                     <div class="alert alert-success o_cp_alert" role="alert" invisible="status != 'approved'">
-                        <div class="o_cp_alert_title"><i class="fa fa-check-circle"/> Approved</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="check_circle"/> Approved</div>
                         <field name="insurance_approver_id" class="d-inline" options="{'no_open': True}"/> signed off on
                         <field name="insurance_approved_on" class="d-inline"/>
                     </div>
                     <div class="alert alert-secondary o_cp_alert" role="alert" invisible="status != 'stale'">
-                        <div class="o_cp_alert_title"><i class="fa fa-refresh"/> Stale claim</div>
+                        <div class="o_cp_alert_title"><i class="oi" data-icon="refresh"/> Stale claim</div>
                         The record changed after locking. Lock the revision again to rebuild the claim.
                     </div>
                     <div class="alert alert-warning o_cp_alert" role="alert"
@@ -306,7 +306,7 @@
                 <field name="discharge_id" invisible="1"/>
                 <sheet class="o_clearpath_wizard o_cp_alerts">
                     <div class="o_cp_hero">
-                        <div class="o_cp_hero_icon"><i class="fa fa-bell"/></div>
+                        <div class="o_cp_hero_icon"><i class="oi" data-icon="notifications"/></div>
                         <div class="o_cp_hero_text">
                             <div class="o_cp_hero_title">Review Alerts</div>
                             <div class="o_cp_hero_sub">
@@ -320,13 +320,13 @@
                     <field name="alerts_html" nolabel="1"/>
                 </sheet>
                 <footer>
-                    <button name="action_open_pharmacy" type="object" string="Pharmacy" icon="fa-medkit"
+                    <button name="action_open_pharmacy" type="object" string="Pharmacy" icon="medical_services"
                             class="btn-secondary" invisible="pharmacy_status != 'flagged'"/>
-                    <button name="action_open_billing" type="object" string="Billing" icon="fa-calculator"
+                    <button name="action_open_billing" type="object" string="Billing" icon="calculate"
                             class="btn-secondary" invisible="billing_status != 'flagged'"/>
-                    <button name="action_open_insurance" type="object" string="Insurance" icon="fa-shield"
+                    <button name="action_open_insurance" type="object" string="Insurance" icon="security"
                             class="btn-secondary" invisible="insurance_status != 'flagged'"/>
-                    <button string="Got it" special="cancel" icon="fa-check" class="btn-primary"/>
+                    <button string="Got it" special="cancel" icon="check" class="btn-primary"/>
                 </footer>
             </form>
         </field>
