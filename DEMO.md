@@ -53,3 +53,16 @@ Audio and photos are real patient data: use a provider you are cleared to send i
 **Billing fixes keep the claim in sync:** fixing a Billed quantity (Billing pop-up or the supply list) re-runs the Insurance worker for the same revision and rebuilds the TPA claim. If the claim was already approved, that approval is withdrawn.
 
 **Audit log:** the chatter (history of state changes, sign-offs, invoices) is hidden by default. Click **Toggle Audit Log** in the header to show or hide it, for example when showing the judges the trail.
+
+## Phase 12: patient SMS + live tracker
+
+1. Open the discharge and click **Live Patient Tracker** in the header. A phone-style page opens in a new tab; keep it next to the Odoo window. It refreshes itself every 4 seconds.
+2. **Lock Revision & Run Checks**: step 1 turns green on the tracker, and the SMS text plus the tracker link are logged in the chatter (Toggle Audit Log) and on the **Patient Tracker & SMS** tab.
+3. Approve Pharmacy, Billing and Insurance: each step turns green. After the third, the **Co-pay due** card appears and a second SMS is logged.
+4. On the tracker click **Pay by card**: the banner badge in Odoo flips to **Co-Pay: Paid**.
+5. **Release Discharge Packet**: the tracker shows the green **Cleared to Go Home** exit pass with a QR code.
+
+SMS runs in mock mode by default (`USE_MOCK_SMS=true`): nothing is sent to a phone. To send real texts, set
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` and `USE_MOCK_SMS=false` in `.env`, then
+`docker compose up -d sidecar_service`. The link in the SMS uses `PUBLIC_ODOO_BASE_URL`; `localhost` only
+opens on this machine, so use the machine's LAN address or a tunnel URL for a real phone.

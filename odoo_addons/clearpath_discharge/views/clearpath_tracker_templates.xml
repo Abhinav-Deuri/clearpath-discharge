@@ -1,0 +1,114 @@
+<odoo>
+    <!-- Patient-facing live discharge tracker (public, token URL). Standalone page: no website module,
+         no backend assets. Styles and script are plain static files. -->
+    <template id="patient_tracker_page" name="ClearPath Patient Discharge Tracker">
+        <html lang="en">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+                <meta name="robots" content="noindex, nofollow"/>
+                <meta name="theme-color" content="#0b2a6f"/>
+                <title>Your discharge progress | ClearPath Hospital</title>
+                <link rel="stylesheet" href="/clearpath_discharge/static/src/tracker/tracker.css"/>
+            </head>
+            <body>
+                <main class="cp-phone">
+                    <div id="cp-app" t-att-data-sig="sig">
+                        <!-- Header card -->
+                        <header class="cp-head">
+                            <div class="cp-brand">
+                                <span class="cp-logo" aria-hidden="true">&#127973;</span>
+                                <div>
+                                    <div class="cp-brand-name">ClearPath Hospital</div>
+                                    <div class="cp-brand-sub">Live discharge tracker</div>
+                                </div>
+                                <span class="cp-rev">Rev <t t-out="revision"/></span>
+                            </div>
+                            <div class="cp-patient">
+                                <div class="cp-patient-label">Patient</div>
+                                <div class="cp-patient-name">
+                                    <t t-out="patient_name"/>
+                                    <span t-if="bed" class="cp-bed">Bed <t t-out="bed"/></span>
+                                </div>
+                            </div>
+                            <div class="cp-status-row">
+                                <span t-attf-class="cp-badge cp-badge-#{badge_kind}"><t t-out="badge_text"/></span>
+                                <span class="cp-count"><t t-out="done_count"/> of 5 steps done</span>
+                            </div>
+                            <div class="cp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                                 t-att-aria-valuenow="progress">
+                                <div class="cp-bar-fill" t-attf-style="width: #{progress}%"/>
+                            </div>
+                        </header>
+
+                        <div t-if="notice == 'paid'" class="cp-note cp-note-ok">Payment received. Thank you!</div>
+                        <div t-if="notice == 'not_ready'" class="cp-note cp-note-warn">
+                            Payment is not open yet. It unlocks when all three checks are complete.
+                        </div>
+
+                        <!-- 5-step timeline -->
+                        <ol class="cp-steps">
+                            <li t-foreach="steps" t-as="step" t-attf-class="cp-step cp-#{step['state']}">
+                                <span class="cp-dot" aria-hidden="true">
+                                    <span class="cp-emoji"><t t-out="step['emoji']"/></span>
+                                    <span class="cp-tick">&#10003;</span>
+                                </span>
+                                <div class="cp-step-body">
+                                    <div class="cp-step-title"><t t-out="step['title']"/></div>
+                                    <div class="cp-step-note"><t t-out="step['note']"/></div>
+                                </div>
+                                <span class="cp-step-tag"><t t-out="step['tag']"/></span>
+                            </li>
+                        </ol>
+
+                        <!-- Co-pay card -->
+                        <section t-if="copay_mode == 'pay'" class="cp-card cp-pay">
+                            <div class="cp-card-label">Co-pay due</div>
+                            <div class="cp-amount">AED <t t-out="copay_amount"/></div>
+                            <p class="cp-card-text">Pay now to unlock your exit pass.</p>
+                            <form method="post" t-attf-action="/discharge/track/#{token}/pay" class="cp-pay-form">
+                                <button type="submit" class="cp-btn cp-btn-dark" data-label="Pay with Apple Pay">
+                                    Pay with Apple Pay
+                                </button>
+                                <button type="submit" class="cp-btn cp-btn-blue" data-label="Pay by card">
+                                    &#128179; Pay by card
+                                </button>
+                            </form>
+                            <p class="cp-fine">Demo payment simulation. No card details are taken and nothing is charged.</p>
+                        </section>
+
+                        <section t-if="copay_mode == 'paid_wait'" class="cp-card cp-paid">
+                            <div class="cp-card-label">Co-pay</div>
+                            <div class="cp-paid-line">&#10003; AED <t t-out="copay_amount"/> paid</div>
+                            <p class="cp-card-text">Your exit pass appears here as soon as the ward coordinator releases you.</p>
+                        </section>
+
+                        <!-- Digital exit pass -->
+                        <section t-if="copay_mode == 'pass'" class="cp-pass">
+                            <div class="cp-pass-top">
+                                <div class="cp-pass-title">Cleared to Go Home &#127881;</div>
+                                <div class="cp-pass-sub">Paid &amp; ready for exit</div>
+                            </div>
+                            <div class="cp-pass-tear" aria-hidden="true"/>
+                            <div class="cp-pass-body">
+                                <img class="cp-qr" t-att-src="qr_url" alt="Exit pass QR code" width="168" height="168"/>
+                                <div class="cp-pass-code"><t t-out="pass_code"/></div>
+                                <div class="cp-pass-meta">
+                                    <span><t t-out="patient_name"/></span>
+                                    <span t-if="bed">Bed <t t-out="bed"/></span>
+                                    <span>Rev <t t-out="revision"/></span>
+                                </div>
+                                <p class="cp-fine">Show this pass at the ward desk.</p>
+                            </div>
+                        </section>
+
+                        <footer class="cp-foot">
+                            <span class="cp-live" aria-hidden="true"/> Live. This page updates by itself every few seconds.
+                        </footer>
+                    </div>
+                </main>
+                <script src="/clearpath_discharge/static/src/tracker/tracker.js"/>
+            </body>
+        </html>
+    </template>
+</odoo>

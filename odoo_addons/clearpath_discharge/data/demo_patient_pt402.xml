@@ -3,6 +3,7 @@
         <record id="demo_patient_pt402" model="clearpath.patient">
             <field name="name">Arabith</field>
             <field name="patient_code">PT-402</field>
+            <field name="phone">+971501234567</field>
             <field name="bed_number">402</field>
             <field name="insurance_provider">Demo TPA Health</field>
             <field name="policy_number">POL-402-DEMO</field>

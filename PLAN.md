@@ -322,3 +322,26 @@ Problem: `ai_draft_summary` is stored as markdown and shown raw in a plain `Text
 - Voice recorder buttons are neutral (`btn-light border`) with only the microphone icon red; Transcribe / Scan buttons likewise.
 - Summary card: pale blue (`bg-primary bg-opacity-10`, `border-primary-subtle`) with a white `shadow-sm` inner panel; labels `text-muted fw-bold small text-uppercase`; allergy values `text-danger fw-bold`.
 - Red is reserved for conflicts and the Gate Locked pill. Pop-up headers are now a calm tinted panel with a single accent colour (blue pharmacy, slate billing, indigo insurance, amber alerts) instead of solid gradients.
+
+---
+# Phase 12 - Twilio SMS + live patient discharge tracker
+
+Patient-facing view of the discharge: a login-free, mobile page at `/discharge/track/<token>` with a
+5-step timeline (Doctor Handoff, Pharmacy, Billing, Insurance, Co-Pay & Exit Pass), a simulated co-pay,
+and a digital exit pass. The link reaches the patient by SMS.
+
+| Part | What was built |
+|---|---|
+| Sidecar | `services/sms_notifier.py` (Twilio REST over `httpx`, logged mock fallback), `SmsNotifyRequest` / `SmsDispatchResult`, `POST /api/v1/notify-sms`, SMS on `/verify` when a `tracking_token` is supplied, `mock_sms` in `/health`. Settings: `TWILIO_*`, `PATIENT_DEMO_PHONE`, `PUBLIC_ODOO_BASE_URL`, `USE_MOCK_SMS`. |
+| Odoo model | `tracking_token`, `patient_tracker_url`, `copay_amount`, `patient_payment_status`, `patient_paid_on`, `last_sms_status`; SMS on lock (tracker link), when all three sign-offs land (co-pay ready) and on release (exit pass); `action_open_patient_tracker`; `action_patient_pay_copay`; `_tracker_values`. |
+| Odoo web | `controllers/patient_tracker.py` (public GET page + POST pay), `views/clearpath_tracker_templates.xml`, `static/src/tracker/tracker.css|js` (in-place refresh every 4 s). |
+| Form | "Live Patient Tracker" header button, Co-Pay badge in the banner, "Patient Tracker & SMS" tab. |
+
+Decisions that differ from the phase brief:
+- **Phone number**: `clearpath.patient` already delegates to `res.partner`, so the Contact's `phone` is used; no second phone field.
+- **Token**: 128-bit `secrets.token_urlsafe(16)` instead of 12 characters of a UUID, because the token is the only credential on a public page. Set in `create()` (a field default would give every existing row the same token on upgrade).
+- **Privacy**: the page shows progress and patient-friendly wording only. No drug names, allergies, billing lines or claim text. The SMS text carries no name. The phone number and tracker link are kept out of the stored audit packet, and phone numbers are masked in logs and the chatter.
+- **One SMS per event**: internal re-verifies (billing corrections) send no `tracking_token`, so they never text the patient again.
+- **SMS never blocks care**: a failed or unavailable SMS is logged; lock, sign-off and release still succeed.
+- **Payment is simulated**: no card data is collected. `csrf=False` on the pay route because the patient has no Odoo session; the URL token is the credential.
+- **Release is not gated on payment**; the exit pass needs both payment and release.

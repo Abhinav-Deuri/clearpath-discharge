@@ -107,6 +107,28 @@ class VerifyRequest(_Strict):
     procedure_text: str = ""  # handoff note / diagnosis text used for ICD-10 / CPT mapping
     tpa_provider: str = ""
     policy_number: str = ""
+    # Patient SMS: sent only when a tracking token is supplied (the doctor's lock, not internal re-verifies).
+    patient_phone: str | None = None
+    tracking_token: str | None = None
+    copay_amount: float = 150.0
+
+
+class SmsNotifyRequest(_Strict):
+    tracking_token: str = Field(min_length=8)
+    to_number: str = ""
+    stage_event: Literal["started", "ready_for_payment", "released"] = "started"
+    copay_amount: float = Field(default=150.0, ge=0)
+
+
+class SmsDispatchResult(_Strict):
+    sent: bool
+    mode: str  # twilio | mock_logged | twilio_failed_logged
+    to_number: str
+    tracking_url: str
+    message_preview: str
+    twilio_sid: str | None = None
+    stage_event: str = "started"
+    error: str = ""
 
 
 class PharmacyConflict(_Strict):
@@ -164,6 +186,7 @@ class AuditPacketSnapshot(_Strict):
     pharmacy: PharmacyCheckOutput
     billing: BillingAuditOutput
     insurance_output: InsuranceClaimOutput | None = None  # None for pre-Phase-5 snapshots
+    sms: SmsDispatchResult | None = None  # response only; never stored with the audit snapshot
     elapsed_ms: float
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()

@@ -2,7 +2,7 @@ import base64
 from unittest.mock import patch
 
 from odoo.exceptions import UserError, ValidationError
-from odoo.tests.common import TransactionCase, tagged
+from odoo.tests.common import HttpCase, TransactionCase, tagged
 
 MODEL_REQUESTS = 'odoo.addons.clearpath_discharge.models.clearpath_discharge.requests'
 WIZARDS = {
@@ -19,6 +19,13 @@ class FakeResponse:
 
     def json(self):
         return self._data
+
+
+def fake_sms(token, to_number, stage_event):
+    link = 'http://localhost:8069/discharge/track/' + token
+    return {'sent': False, 'mode': 'mock_logged', 'to_number': to_number or '+971500000000',
+            'tracking_url': link, 'message_preview': 'ClearPath Hospital: track here: ' + link,
+            'twilio_sid': None, 'stage_event': stage_event, 'error': ''}
 
 
 def fake_post(url, json=None, timeout=None):
@@ -42,6 +49,9 @@ def fake_post(url, json=None, timeout=None):
             {'item_name': 'Stapler', 'surgical_qty_used': 1, 'billed_qty': 0},
             {'item_name': 'Suture Kit', 'surgical_qty_used': 2, 'billed_qty': 0},
         ]})
+
+    if url.endswith('/api/v1/notify-sms'):
+        return FakeResponse(fake_sms(json['tracking_token'], json['to_number'], json['stage_event']))
 
     # /verify
     conflicts = [
@@ -78,6 +88,8 @@ def fake_post(url, json=None, timeout=None):
         'discharge_id': json['discharge_id'], 'revision_id': json['revision_id'],
         'revision_hash': json['revision_hash'], 'status': 'flagged' if flagged else 'cleared',
         'pharmacy': pharmacy, 'billing': billing, 'insurance_output': insurance, 'elapsed_ms': 1.0,
+        'sms': fake_sms(json['tracking_token'], json.get('patient_phone'), 'started')
+        if json.get('tracking_token') else None,
     })
 
 
@@ -598,3 +610,176 @@ class TestDischargeFlow(TransactionCase):
                        'btn-light border btn-sm'):
             self.assertIn(needle, arch)
 
+    # ------------------------------------------------- Phase 12: patient SMS + live tracker
+    def _sms_calls(self, event=None):
+        calls = [c for c in self.requests.post.call_args_list if c.args[0].endswith('/api/v1/notify-sms')]
+        return [c for c in calls if event is None or c.kwargs['json']['stage_event'] == event]
+
+    def _cleared(self):
+        d = self._locked()
+        self._reconcile_and_sign_all_but_insurance(d)
+        self._approve(d, 'insurance')
+        return d
+
+    def test_42_tracking_token_is_unique_and_unguessable(self):
+        other = self.discharge.copy()
+        self.assertTrue(self.discharge.tracking_token and other.tracking_token)
+        self.assertNotEqual(self.discharge.tracking_token, other.tracking_token)
+        self.assertGreaterEqual(len(self.discharge.tracking_token), 20)
+        self.assertTrue(self.discharge.patient_tracker_url.endswith(
+            '/discharge/track/' + self.discharge.tracking_token))
+        action = self.discharge.action_open_patient_tracker()
+        self.assertEqual((action['type'], action['target']), ('ir.actions.act_url', 'new'))
+
+    def test_43_lock_texts_the_patient_and_logs_the_link(self):
+        self.patient.phone = '+971501234567'
+        self.requests.post.reset_mock()
+        d = self._locked()
+        verify = [c for c in self.requests.post.call_args_list if c.args[0].endswith('/api/v1/verify')][-1]
+        self.assertEqual(verify.kwargs['json']['tracking_token'], d.tracking_token)
+        self.assertEqual(verify.kwargs['json']['patient_phone'], '+971501234567')
+        self.assertIn('mock mode', d.last_sms_status)
+        self.assertNotIn('1234567', d.last_sms_status.replace('+97150', ''))  # number is masked
+        bodies = ' '.join(d.message_ids.mapped('body'))
+        self.assertIn('/discharge/track/' + d.tracking_token, bodies)
+        # the stored audit packet never carries the phone number or the tracker link
+        self.assertNotIn(d.tracking_token, d.audit_snapshot_json)
+        self.assertNotIn('971501234567', d.audit_snapshot_json)
+
+    def test_44_internal_re_verify_does_not_text_again(self):
+        d = self._locked()
+        self.requests.post.reset_mock()
+        d.supply_line_ids[0].billed_qty = 4  # billing fix: claim is rebuilt through /verify
+        verifies = [c for c in self.requests.post.call_args_list if c.args[0].endswith('/api/v1/verify')]
+        self.assertTrue(verifies)
+        self.assertFalse(any(c.kwargs['json'].get('tracking_token') for c in verifies))
+        self.assertFalse(self._sms_calls())
+
+    def test_45_copay_sms_once_then_pay_then_exit_pass(self):
+        self.requests.post.reset_mock()
+        d = self._cleared()
+        self.assertEqual(len(self._sms_calls('ready_for_payment')), 1)
+        self.assertIn('Co-pay ready', d.last_sms_status)
+        values = d._tracker_values()
+        self.assertEqual((values['copay_mode'], values['badge_kind']), ('pay', 'pay'))
+        self.assertEqual([s['state'] for s in values['steps']], ['done'] * 4 + ['active'])
+
+        self.assertTrue(d.sudo().action_patient_pay_copay())
+        self.assertEqual(d.patient_payment_status, 'paid')
+        self.assertTrue(d.patient_paid_on)
+        self.assertIn('Patient completed co-pay of AED 150.00 via Mobile Tracker', d.message_ids[0].body)
+        self.assertFalse(d.sudo().action_patient_pay_copay())  # second tap changes nothing
+        self.assertEqual(d._tracker_values()['copay_mode'], 'paid_wait')
+
+        d.action_coordinator_release()
+        self.assertEqual(len(self._sms_calls('released')), 1)
+        values = d._tracker_values()
+        self.assertEqual((values['copay_mode'], values['done_count'], values['progress']), ('pass', 5, 100))
+        self.assertIn('EXIT-PT-T1-R%d-' % d.revision_id, values['pass_code'])
+
+    def test_46_copay_closed_until_all_three_approve(self):
+        d = self._locked()
+        with self.assertRaises(UserError):
+            d.sudo().action_patient_pay_copay()
+        self.assertEqual(d.patient_payment_status, 'unpaid')
+        self.assertEqual(d._tracker_values()['copay_mode'], 'waiting')
+
+    def test_47_tracker_shows_progress_but_no_clinical_detail(self):
+        d = self.discharge
+        values = d._tracker_values()
+        self.assertEqual([s['state'] for s in values['steps']], ['active'] + ['waiting'] * 4)
+        d = self._locked()
+        values = d._tracker_values()
+        self.assertEqual([s['state'] for s in values['steps']],
+                         ['done', 'attention', 'attention', 'attention', 'waiting'])
+        self.assertEqual(values['badge_kind'], 'attention')
+        text = repr(values).lower()
+        for secret in ('amoxicillin', 'penicillin', 'anaphylaxis', 'gauze', 'stapler', 'k35', 'pol-t1'):
+            self.assertNotIn(secret, text)
+
+    def test_48_late_edit_reopens_the_tracker_and_the_copay_sms(self):
+        self.requests.post.reset_mock()
+        d = self._cleared()
+        sig = d._tracker_values()['sig']
+        d.write({'raw_handoff_note': 'Changed plan after lock. appendectomy.'})
+        values = d._tracker_values()
+        self.assertNotEqual(values['sig'], sig)
+        self.assertEqual([s['state'] for s in values['steps']], ['active'] + ['waiting'] * 4)
+        self.assertFalse(d.copay_sms_sent)
+
+    def test_49_sms_failure_never_blocks_the_sign_off(self):
+        d = self._locked()
+        self._reconcile_and_sign_all_but_insurance(d)
+
+        def flaky(url, json=None, timeout=None):
+            if url.endswith('/api/v1/notify-sms'):
+                return FakeResponse({'detail': 'down'}, status=503)
+            return fake_post(url, json=json, timeout=timeout)
+        self.requests.post.side_effect = flaky
+        try:
+            self._approve(d, 'insurance')
+        finally:
+            self.requests.post.side_effect = fake_post
+        self.assertEqual(d.state, 'cleared')
+        self.assertIn('not sent', d.last_sms_status)
+
+    def test_50_form_has_tracker_button_and_copay_badge(self):
+        arch = self.env['clearpath.discharge'].get_view(
+            self.env.ref('clearpath_discharge.clearpath_discharge_view_form').id, 'form')['arch']
+        for needle in ('action_open_patient_tracker', 'Live Patient Tracker', 'patient_payment_status',
+                       'Co-Pay'):
+            self.assertIn(needle, arch)
+
+
+@tagged('post_install', '-at_install')
+class TestPatientTrackerPage(HttpCase):
+    """The public page itself: token access, no login, the pay route."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.patient = cls.env['clearpath.patient'].create({
+            'name': 'Tracker Patient', 'patient_code': 'PT-T9', 'bed_number': '9'})
+        cls.discharge = cls.env['clearpath.discharge'].create({
+            'patient_id': cls.patient.id, 'raw_handoff_note': 'POD1 appendectomy.',
+            'medication_line_ids': [(0, 0, {'drug_name': 'Amoxicillin', 'dosage': '500mg', 'frequency': 'TID'})],
+        })
+        cls.url = '/discharge/track/' + cls.discharge.tracking_token
+
+    def _set(self, **vals):
+        self.discharge.with_context(clearpath_skip_guard=True).write(vals)
+
+    def test_01_unknown_or_short_token_is_404(self):
+        self.assertEqual(self.url_open('/discharge/track/' + 'x' * 22).status_code, 404)
+        self.assertEqual(self.url_open('/discharge/track/abc').status_code, 404)
+
+    def test_02_page_opens_without_login_and_hides_clinical_data(self):
+        res = self.url_open(self.url)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('no-store', res.headers.get('Cache-Control', ''))
+        self.assertEqual(res.headers.get('Referrer-Policy'), 'no-referrer')
+        for needle in ('Tracker Patient', 'Bed 9', 'Doctor Handoff', 'Pharmacy Safety Check',
+                       'Surgical Billing Audit', 'TPA Insurance Pre-Auth', 'Co-Pay'):
+            self.assertIn(needle, res.text)
+        self.assertNotIn('Amoxicillin', res.text)
+        self.assertNotIn('Pay by card', res.text)  # co-pay not open yet
+
+    def test_03_pay_is_refused_until_ready_then_marks_paid(self):
+        res = self.url_open(self.url + '/pay', data={'x': '1'})
+        self.assertEqual(res.status_code, 200)  # redirected back to the tracker
+        self.assertIn('Payment is not open yet', res.text)
+        self.assertEqual(self.discharge.patient_payment_status, 'unpaid')
+
+        self._set(state='cleared', pharmacy_status='approved', billing_status='approved',
+                  insurance_status='approved', coordinator_gate_locked=False)
+        self.assertIn('Pay by card', self.url_open(self.url).text)
+        res = self.url_open(self.url + '/pay', data={'x': '1'})
+        self.assertIn('Payment received', res.text)
+        self.discharge.invalidate_recordset()
+        self.assertEqual(self.discharge.patient_payment_status, 'paid')
+
+        self._set(state='released')
+        page = self.url_open(self.url).text
+        self.assertIn('Cleared to Go Home', page)
+        self.assertIn('/report/barcode/', page)
+        self.assertEqual(self.url_open('/discharge/track/%s/pay' % ('y' * 22), data={'x': '1'}).status_code, 404)

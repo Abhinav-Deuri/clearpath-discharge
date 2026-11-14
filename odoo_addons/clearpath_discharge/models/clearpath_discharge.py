@@ -2,6 +2,8 @@ import hashlib
 import json
 import logging
 import re
+import secrets
+from urllib.parse import urlencode
 
 import requests
 
@@ -277,6 +279,17 @@ class ClearpathDischarge(models.Model):
     alert_count = fields.Integer(compute='_compute_alert_count')
     short_revision_hash = fields.Char(compute='_compute_short_revision_hash')
     show_audit_log = fields.Boolean(string="Show Audit Log", default=False, copy=False)
+
+    # Phase 12: patient SMS + login-free live tracker + co-pay
+    tracking_token = fields.Char(string="Patient Tracking Token", copy=False, readonly=True, index=True)
+    patient_tracker_url = fields.Char(string="Live Patient Tracker URL", compute='_compute_patient_tracker_url')
+    copay_amount = fields.Float(string="Patient Co-Pay Amount (AED)", default=150.0)
+    patient_payment_status = fields.Selection(
+        [('unpaid', 'Awaiting Payment'), ('paid', 'Paid by Patient')],
+        string="Co-Pay", default='unpaid', required=True, copy=False, tracking=True)
+    patient_paid_on = fields.Datetime(string="Co-Pay Paid On", readonly=True, copy=False)
+    last_sms_status = fields.Char(string="Last SMS Notification", readonly=True, copy=False)
+    copay_sms_sent = fields.Boolean(readonly=True, copy=False)
     top_alert_kind = fields.Selection(
         [('pharmacy', 'Pharmacy'), ('billing', 'Billing'), ('insurance', 'Insurance')],
         compute='_compute_top_alert')
@@ -600,6 +613,7 @@ class ClearpathDischarge(models.Model):
                 'insurance_status': 'stale', 'tpa_claim_document': False,
                 'icd10_cpt_codes': False, 'insurance_hold_reasons': False,
                 'insurance_approver_id': False, 'insurance_approved_on': False,
+                'copay_sms_sent': False,  # the patient is told again once the new revision clears
             })
             rec.with_context(clearpath_skip_guard=True).write({
                 'revision_hash': rec._compute_revision_hash(),
@@ -654,6 +668,8 @@ class ClearpathDischarge(models.Model):
             'insurance_hold_reasons': False, 'insurance_approver_id': False,
             'insurance_approved_on': False, 'voice_note_audio': False, 'voice_note_filename': False,
             'nurse_checklist_image': False,
+            'patient_payment_status': 'unpaid', 'patient_paid_on': False, 'copay_sms_sent': False,
+            'last_sms_status': False,
         })
         self.message_post(body="Demo reset to a clean Rev 1 draft.")
         return self._soft_reload()
@@ -749,7 +765,12 @@ class ClearpathDischarge(models.Model):
             'billing_status': 'pending',
             'coordinator_gate_locked': True,
         })
-        snapshot = self._post_sidecar('/api/v1/verify', self._verify_payload(), timeout=30)
+        self._ensure_tracking_token()
+        payload = self._verify_payload()
+        payload.update({'patient_phone': self.patient_id.phone or '', 'tracking_token': self.tracking_token,
+                        'copay_amount': self.copay_amount})
+        snapshot = self._post_sidecar('/api/v1/verify', payload, timeout=30)
+        sms = snapshot.pop('sms', None)  # kept out of the stored audit packet (phone number + tracker link)
         self.message_post(body="Revision <b>Rev %d</b> locked (%s). Verification dispatched." % (
             self.revision_id, self.revision_hash[:8]))
         self.apply_mcp_findings(
@@ -760,6 +781,7 @@ class ClearpathDischarge(models.Model):
             insurance_result=snapshot.get('insurance_output'),
             audit_packet=snapshot,
         )
+        self._log_sms(sms)
         return self._alerts_action_or_reload()
 
     # ---------------------------------------------- Stage 3: apply sidecar results
@@ -816,6 +838,9 @@ class ClearpathDischarge(models.Model):
                     and rec.insurance_status == 'approved'):
                 rec.write({'state': 'cleared', 'coordinator_gate_locked': False})
                 rec.message_post(body="All three sign-offs recorded on Rev %d. Coordinator gate <b>unlocked</b>." % rec.revision_id)
+                if rec.patient_payment_status == 'unpaid' and not rec.copay_sms_sent:
+                    rec._notify_patient_sms('ready_for_payment')
+                    rec.copay_sms_sent = True  # one text per clearing, even if delivery failed
 
     # ------------------------------------------- Phase 5: multimodal bedside inputs
     def _b64(self, value):
@@ -964,6 +989,191 @@ class ClearpathDischarge(models.Model):
         return {'type': 'ir.actions.act_window', 'res_model': 'account.move',
                 'res_id': self.invoice_id.id, 'view_mode': 'form', 'target': 'current'}
 
+    # ------------------------------------------ Phase 12: patient SMS + live tracker
+    @api.model
+    def _new_tracking_token(self):
+        """Unguessable URL token (128 bits): it is the only credential on the public tracker page."""
+        return secrets.token_urlsafe(16)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('tracking_token'):
+                vals['tracking_token'] = self._new_tracking_token()
+        return super().create(vals_list)
+
+    def _ensure_tracking_token(self):
+        """Records created before Phase 12 have no token yet."""
+        for rec in self.filtered(lambda r: not r.tracking_token):
+            rec.sudo().with_context(clearpath_skip_guard=True).write(
+                {'tracking_token': self._new_tracking_token()})
+
+    @api.depends('tracking_token')
+    def _compute_patient_tracker_url(self):
+        base = (self.env['ir.config_parameter'].sudo().get_str('web.base.url', '') or '').rstrip('/')
+        for rec in self:
+            rec.patient_tracker_url = (
+                '%s/discharge/track/%s' % (base, rec.tracking_token) if rec.tracking_token else False)
+
+    def action_open_patient_tracker(self):
+        """Open the patient's phone view in a new tab (for showing it side by side in a demo)."""
+        self.ensure_one()
+        self._ensure_tracking_token()
+        return {'type': 'ir.actions.act_url', 'target': 'new',
+                'url': '/discharge/track/%s' % self.tracking_token}
+
+    @staticmethod
+    def _mask_phone(number):
+        number = number or ''
+        return number if len(number) < 8 else number[:5] + '*' * (len(number) - 8) + number[-3:]
+
+    def _log_sms(self, sms):
+        """Record what was (or would have been) texted to the patient, with a link to the tracker."""
+        self.ensure_one()
+        if not sms:
+            return
+        how = {'twilio': "sent via Twilio",
+               'mock_logged': "mock mode, not sent to a phone",
+               'twilio_failed_logged': "Twilio delivery failed, not sent"}.get(sms.get('mode'), sms.get('mode'))
+        event = {'started': "Tracker link", 'ready_for_payment': "Co-pay ready",
+                 'released': "Exit pass ready"}.get(sms.get('stage_event'), "Patient SMS")
+        to = self._mask_phone(sms.get('to_number'))
+        self.with_context(clearpath_skip_guard=True).write(
+            {'last_sms_status': "%s: %s (%s)" % (event, how, to)})
+        self.message_post(body=Markup(
+            "Patient SMS <b>%s</b> (%s) to %s:<br/>%s<br/>"
+            "<a href=\"%s\" target=\"_blank\">Open the live patient tracker</a>"
+        ) % (event, how, to, sms.get('message_preview') or '', '/discharge/track/%s' % self.tracking_token))
+
+    def _notify_patient_sms(self, stage_event):
+        """Ask the sidecar to text the patient. A failed SMS must never block the clinical workflow."""
+        self.ensure_one()
+        self._ensure_tracking_token()
+        try:
+            sms = self._post_sidecar('/api/v1/notify-sms', {
+                'tracking_token': self.tracking_token,
+                'to_number': self.patient_id.phone or '',
+                'stage_event': stage_event,
+                'copay_amount': self.copay_amount,
+            }, timeout=15)
+        except UserError as exc:
+            _logger.warning("Patient SMS (%s) not sent for discharge %s: %s", stage_event, self.id, exc)
+            self.with_context(clearpath_skip_guard=True).write(
+                {'last_sms_status': "SMS not sent: notification service unavailable"})
+            return False
+        self._log_sms(sms)
+        return True
+
+    def _copay_ready(self):
+        self.ensure_one()
+        return (self.state in ('cleared', 'released') and self.pharmacy_status == 'approved'
+                and self.billing_status == 'approved' and self.insurance_status == 'approved')
+
+    def action_patient_pay_copay(self):
+        """Called (sudo) by the public tracker page. SIMULATED payment: marks the co-pay as paid."""
+        self.ensure_one()
+        if self.patient_payment_status == 'paid':
+            return False
+        if not self._copay_ready():
+            raise UserError("The co-pay opens once Pharmacy, Billing and Insurance have all approved.")
+        self.with_context(clearpath_skip_guard=True).write(
+            {'patient_payment_status': 'paid', 'patient_paid_on': fields.Datetime.now()})
+        self.message_post(
+            body="\U0001F4B3 Patient completed co-pay of AED %.2f via Mobile Tracker." % self.copay_amount,
+            author_id=self.env.ref('base.partner_root').id)
+        return True
+
+    def _tracker_values(self):
+        """Plain values for the public patient page. Progress and patient-friendly wording ONLY:
+        no drug names, allergies, billing lines or claim text ever leave through here."""
+        self.ensure_one()
+        locked = self.state != 'draft'
+        revised = self.revision_id > 1
+
+        def step(emoji, title, state, note):
+            tag = {'done': "Done", 'active': "In progress", 'attention': "Under review",
+                   'waiting': "Waiting"}[state]
+            return {'emoji': emoji, 'title': title, 'state': state, 'note': note, 'tag': tag}
+
+        def dept(emoji, title, status, review_note, done_note):
+            if not locked:
+                return step(emoji, title, 'waiting',
+                            "Will be re-checked after your doctor's update" if revised
+                            else "Starts after your doctor's review")
+            if status == 'approved':
+                return step(emoji, title, 'done', done_note)
+            if status == 'flagged':
+                return step(emoji, title, 'attention', review_note)
+            return step(emoji, title, 'active', "Being checked now")
+
+        steps = [
+            step("\U0001F468‍⚕️", "Doctor Handoff & AI Summary", 'done',
+                 "Your doctor completed your discharge review") if locked else
+            step("\U0001F468‍⚕️", "Doctor Handoff & AI Summary", 'active',
+                 "Your doctor is updating your discharge plan" if revised
+                 else "Your doctor is preparing your discharge summary"),
+            dept("\U0001F48A", "Pharmacy Safety Check", self.pharmacy_status,
+                 "Doctor reviewing medication adjustment", "Your medications are confirmed"),
+            dept("\U0001F9FE", "Surgical Billing Audit", self.billing_status,
+                 "Billing is finalising your hospital bill", "Your bill is finalised"),
+            dept("\U0001F6E1️", "TPA Insurance Pre-Auth", self.insurance_status,
+                 "Your insurance paperwork is being completed", "Insurance approved"),
+        ]
+
+        paid = self.patient_payment_status == 'paid'
+        ready = self._copay_ready()
+        if paid and self.state == 'released':
+            copay_mode = 'pass'
+            steps.append(step("\U0001F4B3", "Co-Pay & Exit Pass", 'done', "Paid. Your exit pass is ready"))
+        elif paid and ready:
+            copay_mode = 'paid_wait'
+            steps.append(step("\U0001F4B3", "Co-Pay & Exit Pass", 'active', "Paid. Waiting for final release"))
+        elif ready:
+            copay_mode = 'pay'
+            steps.append(step("\U0001F4B3", "Co-Pay & Exit Pass", 'active', "Your co-pay is ready to pay"))
+        else:
+            copay_mode = 'waiting'
+            steps.append(step("\U0001F4B3", "Co-Pay & Exit Pass", 'waiting',
+                              "Co-pay already paid. Opens again after the checks" if paid
+                              else "Opens when all three checks are done"))
+
+        states = [s['state'] for s in steps]
+        done_count = states.count('done')
+        if copay_mode == 'pass':
+            badge = ('done', "Cleared to go home")
+        elif copay_mode == 'pay':
+            badge = ('pay', "Payment needed")
+        elif 'attention' in states:
+            badge = ('attention', "Being reviewed")
+        elif not locked:
+            badge = ('progress', "With your doctor")
+        else:
+            badge = ('progress', "In progress")
+
+        pass_code = "EXIT-%s-R%d-%s" % (
+            self.patient_id.patient_code or 'PT', self.revision_id, (self.revision_hash or '')[:6].upper())
+        return {
+            'token': self.tracking_token,
+            'patient_name': self.patient_id.name or "Patient",
+            'bed': self.patient_id.bed_number or '',
+            'revision': self.revision_id,
+            'steps': steps,
+            'done_count': done_count,
+            'progress': max(done_count * 20, 6),
+            'badge_kind': badge[0],
+            'badge_text': badge[1],
+            'copay_mode': copay_mode,
+            'copay_amount': "%.2f" % self.copay_amount,
+            'pass_code': pass_code,
+            'qr_url': '/report/barcode/?' + urlencode(
+                {'barcode_type': 'QR', 'value': pass_code, 'width': 168, 'height': 168}),
+            # changes whenever anything visible changes: the page swaps its content only then
+            'sig': hashlib.sha256(repr(
+                (states, copay_mode, self.revision_id, badge, "%.2f" % self.copay_amount)).encode()
+            ).hexdigest()[:16],
+            'notice': '',
+        }
+
     # ----------------------------------------- HITL gate #2 - coordinator release
     def action_coordinator_release(self):
         self.ensure_one()
@@ -1007,4 +1217,5 @@ class ClearpathDischarge(models.Model):
         })
         self.message_post(body="Discharge packet <b>released</b> and locked by %s (Rev %d, %s)." % (
             self.env.user.name, self.revision_id, self.revision_hash[:8]))
+        self._notify_patient_sms('released')
         return self._soft_reload()

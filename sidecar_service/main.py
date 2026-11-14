@@ -11,6 +11,8 @@ from schemas import (
     AuditPacketSnapshot,
     DraftRequest,
     DraftResponse,
+    SmsDispatchResult,
+    SmsNotifyRequest,
     SupplyScanRequest,
     SupplyScanResponse,
     VerifyRequest,
@@ -27,6 +29,7 @@ from services.multimodal_ingestor import (
     transcribe_doctor_voice_note,
 )
 from services.odoo_rpc import push_findings_to_odoo
+from services.sms_notifier import send_patient_tracker_sms, twilio_enabled
 from services.token_pruner import prune_and_anonymize
 
 log = logging.getLogger("clearpath")
@@ -53,6 +56,7 @@ async def health() -> dict:
         "status": "ok" if db_ok else "degraded",
         "sqlite": db_ok,
         "mock_llm": settings.use_mock_llm or not (settings.ai_base_url and settings.ai_api_key),
+        "mock_sms": not twilio_enabled(),
     }
 
 
@@ -132,7 +136,19 @@ async def verify(req: VerifyRequest, background: BackgroundTasks) -> AuditPacket
 
     if req.push_to_odoo:
         background.add_task(_push, snapshot)
+    if req.tracking_token:
+        # The doctor just locked the revision: text the patient their live tracker link. The result rides
+        # on the response only (the snapshot saved above stays free of phone numbers and tracker links).
+        sms = await send_patient_tracker_sms(
+            req.patient_phone or "", req.tracking_token, "started", req.copay_amount)
+        return snapshot.model_copy(update={"sms": sms})
     return snapshot
+
+
+@app.post("/api/v1/notify-sms", response_model=SmsDispatchResult)
+async def notify_sms(req: SmsNotifyRequest) -> SmsDispatchResult:
+    """Odoo-triggered patient SMS: co-pay ready, or packet released."""
+    return await send_patient_tracker_sms(req.to_number, req.tracking_token, req.stage_event, req.copay_amount)
 
 
 @app.get("/api/v1/snapshot/{discharge_id}/{revision_id}", response_model=AuditPacketSnapshot)

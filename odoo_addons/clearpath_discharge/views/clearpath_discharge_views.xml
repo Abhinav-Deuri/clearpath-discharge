@@ -91,6 +91,9 @@
                             class="btn-light border btn-sm" groups="base.group_system"
                             invisible="state == 'draft' and revision_id == 1 and not ai_draft_summary"
                             confirm="Reset this discharge to a clean Rev 1 draft?"/>
+                    <button name="action_open_patient_tracker" type="object" class="btn-light border btn-sm"
+                            string="&#128241; Live Patient Tracker"
+                            title="Open the patient's phone view of this discharge in a new tab"/>
                     <button name="action_toggle_audit_log" type="object" class="btn-light border btn-sm"
                             string="&#128065;&#65039; Toggle Audit Log"/>
                     <button name="%(action_report_discharge_packet)d" type="action" icon="picture_as_pdf"
@@ -103,6 +106,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <field name="show_audit_log" invisible="1"/>
+                        <field name="patient_payment_status" invisible="1"/>
                         <field name="pharmacy_status" invisible="1"/>
                         <field name="billing_status" invisible="1"/>
                         <field name="insurance_status" invisible="1"/>
@@ -265,6 +269,14 @@
                                   title="Snapshot hash (the full SHA-256 is in the Audit Packet tab)">
                                 <i class="oi me-1" data-icon="tag"/><field name="short_revision_hash" class="d-inline"/>
                             </span>
+                            <span class="o_cp_pill" invisible="patient_payment_status == 'paid'"
+                                  title="Patient co-pay, paid from the live tracker page">
+                                <i class="oi me-1" data-icon="payments"/>Co-Pay: Unpaid
+                            </span>
+                            <span class="badge rounded-pill text-bg-success px-3 py-2" invisible="patient_payment_status != 'paid'"
+                                  title="Patient co-pay, paid from the live tracker page">
+                                <i class="oi me-1" data-icon="payments"/>Co-Pay: Paid
+                            </span>
                             <span class="badge rounded-pill text-bg-danger px-3 py-2" invisible="not coordinator_gate_locked">
                                 <i class="oi me-1" data-icon="lock"/>Gate Locked
                             </span>
@@ -367,6 +379,25 @@
                             </field>
                         </page>
 
+                        <page string="Patient Tracker &amp; SMS" name="patient_tracker">
+                            <group>
+                                <group string="Live Tracker">
+                                    <field name="patient_tracker_url" widget="url" readonly="1"/>
+                                    <field name="last_sms_status"/>
+                                </group>
+                                <group string="Co-Pay">
+                                    <field name="copay_amount" readonly="patient_payment_status == 'paid' or state == 'released'"/>
+                                    <field name="patient_payment_status" readonly="1" widget="badge"
+                                           decoration-success="patient_payment_status == 'paid'"
+                                           decoration-warning="patient_payment_status == 'unpaid'"/>
+                                    <field name="patient_paid_on" invisible="not patient_paid_on"/>
+                                </group>
+                            </group>
+                            <p class="text-muted small">
+                                The patient gets this link by SMS when the doctor locks the revision. It needs no login:
+                                anyone holding the link can see the progress and pay the co-pay, so share it only with the patient.
+                            </p>
+                        </page>
                         <page string="Audit Packet" name="audit">
                             <group>
                                 <field name="revision_hash" readonly="1"/>

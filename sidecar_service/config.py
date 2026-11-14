@@ -32,5 +32,14 @@ class Settings(BaseSettings):
     odoo_user: str = "admin"
     odoo_password: str = "admin"
 
+    # Patient SMS (Twilio). Mock mode logs the SMS text + tracker link instead of sending.
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    patient_demo_phone: str = "+971500000000"  # used when the patient record has no mobile number
+    public_odoo_base_url: str = "http://localhost:8069"  # base of the link inside the SMS
+    use_mock_sms: bool = True
+    sms_timeout_seconds: float = 10.0
+
 
 settings = Settings()

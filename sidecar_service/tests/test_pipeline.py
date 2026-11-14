@@ -341,3 +341,105 @@ def test_scan_supply_sheet_mock(client, monkeypatch):
     assert client.post("/api/v1/scan-supply-sheet", json={"image_base64": "???", "discharge_id": 1}).status_code == 422
     monkeypatch.setattr(main, "MAX_IMAGE_BYTES", 5)
     assert client.post("/api/v1/scan-supply-sheet", json={"image_base64": IMAGE_B64, "discharge_id": 1}).status_code == 422
+
+
+# ---------------------------------------------------------------- Phase 12: patient SMS + tracker link
+TOKEN = "tok_demo_1234567890"
+
+
+def test_sms_mock_mode_returns_text_and_link(monkeypatch):
+    from services import sms_notifier
+    monkeypatch.setattr(settings, "use_mock_sms", True)
+    monkeypatch.setattr(settings, "public_odoo_base_url", "http://hospital.test/")
+    res = asyncio.run(sms_notifier.send_patient_tracker_sms("+971501234567", TOKEN))
+    assert (res.sent, res.mode) == (False, "mock_logged")
+    assert res.tracking_url == "http://hospital.test/discharge/track/" + TOKEN
+    assert res.tracking_url in res.message_preview and "discharge review" in res.message_preview
+
+
+def test_sms_copay_message_and_demo_phone_fallback(monkeypatch):
+    from services import sms_notifier
+    monkeypatch.setattr(settings, "use_mock_sms", True)
+    monkeypatch.setattr(settings, "patient_demo_phone", "+971500000000")
+    res = asyncio.run(sms_notifier.send_patient_tracker_sms("", TOKEN, "ready_for_payment", 150))
+    assert res.to_number == "+971500000000"
+    assert "AED 150.00 co-pay" in res.message_preview
+
+
+def _twilio_on(monkeypatch):
+    for key, value in (("use_mock_sms", False), ("twilio_account_sid", "ACtest"),
+                       ("twilio_auth_token", "secret"), ("twilio_from_number", "+15005550006")):
+        monkeypatch.setattr(settings, key, value)
+
+
+def test_sms_twilio_path_posts_form_and_reports_sid(monkeypatch):
+    from services import sms_notifier
+    _twilio_on(monkeypatch)
+    seen = {}
+
+    class FakeResponse:
+        status_code = 201
+
+        def json(self):
+            return {"sid": "SM123"}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, auth=None, data=None):
+            seen.update(url=url, auth=auth, data=data)
+            return FakeResponse()
+
+    monkeypatch.setattr(sms_notifier.httpx, "AsyncClient", FakeClient)
+    res = asyncio.run(sms_notifier.send_patient_tracker_sms("+971501234567", TOKEN))
+    assert (res.sent, res.mode, res.twilio_sid) == (True, "twilio", "SM123")
+    assert seen["url"].endswith("/Accounts/ACtest/Messages.json") and seen["auth"] == ("ACtest", "secret")
+    assert seen["data"]["To"] == "+971501234567" and seen["data"]["From"] == "+15005550006"
+
+
+def test_sms_twilio_failure_falls_back_without_raising(monkeypatch):
+    from services import sms_notifier
+    _twilio_on(monkeypatch)
+
+    class Boom:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            raise RuntimeError("network down")
+
+        async def __aexit__(self, *a):
+            return False
+
+    monkeypatch.setattr(sms_notifier.httpx, "AsyncClient", Boom)
+    res = asyncio.run(sms_notifier.send_patient_tracker_sms("+971501234567", TOKEN))
+    assert (res.sent, res.mode) == (False, "twilio_failed_logged")
+    assert "network down" in res.error and res.tracking_url in res.message_preview
+
+
+def test_verify_sends_sms_only_with_a_tracking_token(client, monkeypatch):
+    monkeypatch.setattr(settings, "use_mock_sms", True)
+    plain = client.post("/api/v1/verify", json=pt402_verify()).json()
+    assert plain["sms"] is None
+    body = pt402_verify(rev=2, rev_hash=HASH2)
+    body.update(tracking_token=TOKEN, patient_phone="+971501234567")
+    with_sms = client.post("/api/v1/verify", json=body).json()
+    assert with_sms["sms"]["mode"] == "mock_logged" and TOKEN in with_sms["sms"]["tracking_url"]
+    # the stored audit snapshot never carries the phone number or tracker link
+    stored = client.get("/api/v1/snapshot/402/2").json()
+    assert stored["sms"] is None
+
+
+def test_notify_sms_endpoint(client, monkeypatch):
+    monkeypatch.setattr(settings, "use_mock_sms", True)
+    res = client.post("/api/v1/notify-sms", json={
+        "tracking_token": TOKEN, "to_number": "+971501234567", "stage_event": "released"})
+    assert res.status_code == 200 and "cleared to go home" in res.json()["message_preview"]
+    assert client.post("/api/v1/notify-sms", json={"tracking_token": "x"}).status_code == 422
