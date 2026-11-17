@@ -100,9 +100,10 @@
                 <field name="insurance_hold_count"/>
                 <field name="patient_payment_status"/>
                 <field name="coordinator_gate_locked"/>
+                <field name="is_ama_discharge"/>
                 <templates>
                     <t t-name="card">
-                        <div t-attf-class="o_cp_kcard {{ record.state.raw_value == 'flagged' ? 'o_cp_kcard_flagged' : '' }} {{ record.state.raw_value == 'released' ? 'o_cp_kcard_done' : '' }}">
+                        <div t-attf-class="o_cp_kcard {{ record.state.raw_value == 'flagged' ? 'o_cp_kcard_flagged' : '' }} {{ record.state.raw_value == 'released' and !record.is_ama_discharge.raw_value ? 'o_cp_kcard_done' : '' }} {{ record.is_ama_discharge.raw_value ? 'o_cp_kcard_ama' : '' }}">
                             <div class="d-flex align-items-start justify-content-between gap-2">
                                 <div class="o_cp_kmain">
                                     <div class="o_cp_kname"><field name="patient_id"/></div>
@@ -114,6 +115,10 @@
                                 <span class="o_cp_krev" title="Revision"><i class="oi" data-icon="fork_right" title="Revision"/> Rev <field name="revision_id"/></span>
                             </div>
                             <div class="o_cp_kflags">
+                                <span t-if="record.is_ama_discharge.raw_value" class="o_cp_ktag o_cp_ktag_ama"
+                                      title="Released against medical advice (patient choice)">
+                                    <i class="oi" data-icon="warning" title="AMA"/> AMA
+                                </span>
                                 <span t-if="record.pharmacy_status.raw_value == 'flagged'" groups="clearpath_discharge.group_clearpath_pharmacist,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="o_cp_ktag o_cp_ktag_flagged"
                                       title="Pharmacy: unresolved flag">
                                     <i class="oi cp-beat-fade" data-icon="warning" title="Pharmacy flag"/> Pharmacy
@@ -131,14 +136,18 @@
                                       title="Pharmacy: stale, lock the revision again">
                                     <i class="oi" data-icon="refresh" title="Pharmacy stale"/> Pharmacy
                                 </span>
-                                <span t-if="record.billing_status.raw_value == 'flagged'" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="o_cp_ktag o_cp_ktag_flagged"
+                                <span t-if="record.billing_status.raw_value == 'flagged' and record.unbilled_item_count.raw_value &gt; 0" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="o_cp_ktag o_cp_ktag_flagged"
                                       title="Billing: unresolved flag">
                                     <i class="oi cp-beat-fade" data-icon="warning" title="Billing flag"/> Billing
                                     <t t-if="record.unbilled_item_count.raw_value"><b>&#215;<t t-out="record.unbilled_item_count.raw_value"/></b></t>
                                 </span>
-                                <span t-if="record.billing_status.raw_value == 'pending' and record.state.raw_value != 'draft'" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system"
+                                <span t-if="record.billing_status.raw_value == 'pending' and record.state.raw_value != 'draft' and record.unbilled_item_count.raw_value &gt; 0" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system"
                                       class="o_cp_ktag o_cp_ktag_ready" title="Billing: ready for review">
                                     <i class="oi" data-icon="schedule" title="Billing ready"/> Billing
+                                </span>
+                                <span t-if="['pending', 'flagged'].includes(record.billing_status.raw_value) and record.state.raw_value != 'draft' and record.unbilled_item_count.raw_value == 0" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system"
+                                      class="o_cp_ktag o_cp_ktag_approved" title="Billing: everything used is billed">
+                                    <i class="oi" data-icon="check_circle" title="All billed"/> Billing
                                 </span>
                                 <span t-if="record.billing_status.raw_value == 'approved'" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="o_cp_ktag o_cp_ktag_approved"
                                       title="Billing: approved">
@@ -179,11 +188,15 @@
                                         groups="clearpath_discharge.group_clearpath_pharmacist,base.group_system" class="btn btn-sm btn-outline-primary">
                                     <i class="oi" data-icon="medical_services" title="Review Meds"/> Review Meds
                                 </button>
-                                <button t-if="['flagged', 'verifying'].includes(record.state.raw_value) and ['pending', 'flagged'].includes(record.billing_status.raw_value) and record.billing_status.raw_value == 'flagged'" type="object" name="action_open_billing_wizard"
+                                <button t-if="['flagged', 'verifying'].includes(record.state.raw_value) and record.billing_status.raw_value == 'flagged' and record.unbilled_item_count.raw_value &gt; 0" type="object" name="action_open_billing_wizard"
                                         groups="clearpath_discharge.group_clearpath_billing,base.group_system" class="btn btn-sm btn-danger">
                                     <i class="oi" data-icon="description" title="Review Billing"/> Review Billing
                                 </button>
-                                <button t-if="['flagged', 'verifying'].includes(record.state.raw_value) and ['pending', 'flagged'].includes(record.billing_status.raw_value) and record.billing_status.raw_value == 'pending'" type="object" name="action_open_billing_wizard"
+                                <button t-if="['flagged', 'verifying'].includes(record.state.raw_value) and ['pending', 'flagged'].includes(record.billing_status.raw_value) and record.unbilled_item_count.raw_value == 0" type="object" name="action_open_billing_wizard"
+                                        groups="clearpath_discharge.group_clearpath_billing,base.group_system" class="btn btn-sm btn-success">
+                                    <i class="oi" data-icon="description" title="Review Billing"/> Review Billing
+                                </button>
+                                <button t-if="['flagged', 'verifying'].includes(record.state.raw_value) and record.billing_status.raw_value == 'pending' and record.unbilled_item_count.raw_value &gt; 0" type="object" name="action_open_billing_wizard"
                                         groups="clearpath_discharge.group_clearpath_billing,base.group_system" class="btn btn-sm btn-outline-primary">
                                     <i class="oi" data-icon="description" title="Review Billing"/> Review Billing
                                 </button>
@@ -305,11 +318,11 @@
                                 <span class="o_stat_text fw-bold text-center d-block">Billing</span>
                             </div>
                         </button>
-                        <button name="action_open_billing_wizard" type="object" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="oe_stat_button o_cp_stat o_cp_stat_pending"
-                                title="Billing: ready for review" invisible="state == 'draft' or billing_status not in ('pending', 'flagged') or unbilled_item_count != 0">
-                            <i class="oi oi-2x text-warning o_button_icon" data-icon="description"/>
+                        <button name="action_open_billing_wizard" type="object" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="oe_stat_button o_cp_stat o_cp_stat_approved"
+                                title="Billing: everything used is billed, ready to approve" invisible="state == 'draft' or billing_status not in ('pending', 'flagged') or unbilled_item_count != 0">
+                            <i class="oi oi-2x text-success o_button_icon" data-icon="check_circle"/>
                             <div class="o_stat_info"><span class="o_stat_value fs-6 fw-bold">Billing</span>
-                                <span class="o_stat_text">Ready to review</span></div>
+                                <span class="o_stat_text">All billed</span></div>
                         </button>
                         <button name="action_open_billing_wizard" type="object" groups="clearpath_discharge.group_clearpath_billing,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system" class="oe_stat_button o_cp_stat o_cp_stat_approved"
                                 title="Billing: approved" invisible="billing_status != 'approved'">
@@ -360,7 +373,9 @@
                         </button>
                     </div>
                     <widget name="web_ribbon" title="Released" bg_color="text-bg-success"
-                            invisible="state != 'released'"/>
+                            invisible="state != 'released' or is_ama_discharge"/>
+                    <widget name="web_ribbon" title="AMA Override" bg_color="text-bg-warning"
+                            invisible="not is_ama_discharge"/>
                     <widget name="web_ribbon" title="Allergy Hold" bg_color="text-bg-danger" groups="clearpath_discharge.group_clearpath_pharmacist,clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,base.group_system"
                             invisible="pharmacy_status != 'flagged' or state == 'released'"/>
                     <widget name="web_ribbon" title="Cleared" bg_color="text-bg-success"
@@ -386,6 +401,18 @@
                         <h3 class="mb-0"><strong>ON HOLD:</strong> <field name="top_alert_title" class="d-inline"/></h3>
                         <button name="action_open_alerts_wizard" type="object" class="btn btn-link ms-auto"
                                 string="Details" icon="notifications"/>
+                    </div>
+
+                    <field name="is_ama_discharge" invisible="1"/>
+                    <!-- Phase 15: legal waiver record when the patient left against medical advice -->
+                    <div class="alert alert-warning border border-danger o_cp_strip" role="alert"
+                         invisible="not is_ama_discharge">
+                        <h5 class="mb-2"><i class="oi me-2 text-danger" data-icon="warning" title="AMA"/><strong>AMA Legal Waiver Signed</strong></h5>
+                        <div class="row g-2">
+                            <div class="col-md-4 d-flex gap-2"><span class="text-muted">Signed by:</span> <field name="ama_signed_by" class="fw-bold"/></div>
+                            <div class="col-md-4 d-flex gap-2"><span class="text-muted">At:</span> <field name="ama_timestamp" class="fw-bold"/></div>
+                            <div class="col-12 d-flex gap-2"><span class="text-muted">Stated reason:</span> <field name="ama_reason"/></div>
+                        </div>
                     </div>
 
                     <div class="oe_title">
@@ -430,6 +457,17 @@
                             </span>
                             <span class="badge rounded-pill text-bg-success px-3 py-2" invisible="coordinator_gate_locked">
                                 <i class="oi me-1" data-icon="lock_open"/>Gate Unlocked
+                            </span>
+                            <button name="action_open_ama_wizard" type="object"
+                                    class="btn btn-light text-danger border border-danger btn-sm rounded-pill ms-2 fw-bold o_cp_ama_btn"
+                                    groups="clearpath_discharge.group_clearpath_doctor,clearpath_discharge.group_clearpath_coordinator,clearpath_discharge.group_clearpath_admin,base.group_system"
+                                    invisible="state == 'released'"
+                                    title="Discharge patient at their own request against doctor's advice">
+                                <i class="oi me-1" data-icon="person_off" title="AMA"/>Patient AMA Choice
+                            </button>
+                            <span class="badge rounded-pill text-bg-warning text-dark border border-danger px-3 py-2 ms-2"
+                                  invisible="not is_ama_discharge">
+                                <i class="oi text-danger me-1" data-icon="warning" title="AMA"/>RELEASED: PATIENT CHOICE (AMA)
                             </span>
                         </div>
                         <div class="w-100 mt-2 o_cp_hist_row" invisible="not patient_history_html">

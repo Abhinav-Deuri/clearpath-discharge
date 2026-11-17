@@ -384,16 +384,111 @@ class TestDischargeFlow(TransactionCase):
         d.action_lock_revision_and_verify()
         wiz = self._wizard(d, 'billing')
         self.assertEqual((len(wiz.line_ids), wiz.total_unbilled), (2, 3))
+        self.assertEqual(wiz.view_state, 'flagged')  # red badge while something is unbilled
         self.assertFalse(wiz.can_approve)
         with self.assertRaises(UserError):
             wiz.action_approve()
         for line in wiz.line_ids:  # what the user types into the Billed column
             line.billed_qty = line.surgical_qty_used
         self.assertEqual(wiz.total_unbilled, 0)
+        self.assertEqual(wiz.view_state, 'reconciled')  # green as soon as billed == used
         self.assertTrue(wiz.can_approve)
         wiz.action_approve()
+        wiz.invalidate_recordset()
+        self.assertEqual(wiz.view_state, 'approved')
         self.assertEqual(d.supply_line_ids.mapped('billed_qty'), [4, 1])
         self.assertEqual((d.revision_id, d.billing_status), (2, 'approved'))  # no new revision
+
+    def test_21b_billing_red_alert_clears_once_billed_matches_used(self):
+        d = self._locked()
+        self.assertEqual(d.billing_status, 'flagged')
+        self.assertEqual(d.unbilled_item_count, 2)
+        self.assertEqual(d.top_alert_kind, 'pharmacy')  # allergy conflict outranks billing
+        self.assertIn("Surgical billing discrepancy", [i[2] for i in d._alert_items()])
+        d.medication_line_ids.write({'is_flagged': False, 'conflict_reason': False})
+        d.pharmacy_status = 'approved'
+        self.assertEqual(d.top_alert_kind, 'billing')
+        for s in d.supply_line_ids:  # billed quantity now equals what was used (same revision)
+            s.billed_qty = s.surgical_qty_used
+        self.assertEqual(d.unbilled_item_count, 0)
+        self.assertEqual(d.billing_status, 'flagged')  # not signed yet ...
+        self.assertNotEqual(d.top_alert_kind, 'billing')  # ... but nothing is red any more
+        self.assertNotIn("Surgical billing discrepancy", [i[2] for i in d._alert_items()])
+
+    # ------------------------------------------------------------ Phase 15: AMA override
+    def _ama_wizard(self, d, user=None, **vals):
+        env = d.with_user(user).env if user else d.env
+        return env['clearpath.ama.wizard'].with_context(default_discharge_id=d.id).create(
+            dict({'discharge_id': d.id}, **vals))
+
+    def _released_sms_count(self):
+        return len([c for c in self.requests.post.call_args_list
+                    if (c.kwargs.get('json') or {}).get('stage_event') == 'released'])
+
+    def test_60_ama_releases_through_a_locked_gate_and_records_the_waiver(self):
+        d = self._locked()
+        self.assertEqual((d.state, d.coordinator_gate_locked, d.revision_id), ('flagged', True, 1))
+        action = d.with_user(self.doctor).action_open_ama_wizard()
+        self.assertEqual((action['res_model'], action['target']), ('clearpath.ama.wizard', 'new'))
+        wiz = self._ama_wizard(d, self.doctor)
+        self.assertEqual(wiz.patient_signature_name, 'Test Patient')  # pre-filled with the patient's own name
+        with self.assertRaises(UserError):  # liability box not ticked
+            wiz.action_confirm_ama_discharge()
+        self.assertEqual((d.state, d.is_ama_discharge), ('flagged', False))
+        sms_before = self._released_sms_count()
+        wiz.confirm_liability_waiver = True
+        wiz.stated_reason = "Family emergency"
+        self.assertEqual(wiz.action_confirm_ama_discharge(), {'type': 'ir.actions.act_window_close'})
+        self.assertEqual((d.state, d.is_ama_discharge, d.coordinator_gate_locked), ('released', True, False))
+        self.assertEqual((d.ama_signed_by, d.ama_reason), ('Test Patient', "Family emergency"))
+        self.assertTrue(d.ama_timestamp and d.released_on)
+        self.assertEqual((d.coordinator_id, d.revision_id), (self.doctor, 1))
+        self.assertEqual(d.pharmacy_status, 'flagged')  # the open flags are not erased
+        self.assertTrue(any('AGAINST MEDICAL ADVICE' in (m.body or '') for m in d.message_ids))
+        self.assertEqual(self._released_sms_count(), sms_before)  # no "you are cleared" text for an AMA exit
+
+    def test_61_ama_is_limited_to_doctor_coordinator_and_admin(self):
+        d = self._locked()
+        for user in (self.nurse, self.pharmacist, self.billing):
+            with self.assertRaises(UserError):
+                d.with_user(user).action_open_ama_wizard()
+        wiz = self._ama_wizard(d, confirm_liability_waiver=True)
+        for user in (self.nurse, self.pharmacist, self.billing):
+            with self.assertRaises(UserError):
+                wiz.with_user(user).action_confirm_ama_discharge()
+        self.assertEqual(d.state, 'flagged')
+        for user in (self.coordinator, self.insurer):
+            self.assertEqual(d.with_user(user).action_open_ama_wizard()['target'], 'new')
+
+    def test_62_ama_is_final_and_reset_demo_clears_it(self):
+        d = self._locked()
+        self._ama_wizard(d, self.coordinator, confirm_liability_waiver=True).action_confirm_ama_discharge()
+        with self.assertRaises(UserError):
+            d.action_open_ama_wizard()  # already released
+        with self.assertRaises(UserError):
+            self._ama_wizard(d, confirm_liability_waiver=True).action_confirm_ama_discharge()
+        with self.assertRaises(UserError):
+            d.write({'raw_handoff_note': 'edited after an AMA release'})
+        demo = self.env.ref('clearpath_discharge.demo_patient_pt402')
+        d.patient_id = demo
+        d.action_reset_demo()
+        self.assertEqual((d.state, d.is_ama_discharge, d.ama_reason, d.ama_signed_by, d.ama_timestamp),
+                         ('draft', False, False, False, False))
+
+    def test_63_tracker_shows_the_ama_notice_not_an_exit_pass(self):
+        d = self._locked()
+        d.with_context(clearpath_skip_guard=True).write({'patient_payment_status': 'paid'})
+        self._ama_wizard(d, self.doctor, confirm_liability_waiver=True,
+                         stated_reason="Private clinical reason").action_confirm_ama_discharge()
+        values = d._tracker_values()
+        self.assertEqual((values['copay_mode'], values['badge_kind']), ('ama', 'ama'))
+        self.assertEqual(values['ama_signed_by'], 'Test Patient')
+        self.assertEqual(values['steps'][-1]['tag'], "AMA")
+        self.assertNotIn('private clinical reason', repr(values).lower())  # the reason never leaves Odoo
+        html = str(self.env['ir.qweb']._render('clearpath_discharge.patient_tracker_page', values))
+        self.assertIn('Released Against Medical Advice (Patient Choice)', html)
+        self.assertNotIn('Cleared to Go Home', html)
+        self.assertNotIn('Exit pass QR', html)
 
     def test_22_approved_wizard_cannot_approve_twice(self):
         d = self._locked()

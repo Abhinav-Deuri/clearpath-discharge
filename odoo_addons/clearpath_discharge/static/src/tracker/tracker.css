@@ -274,6 +274,22 @@ body {
 .cp-pass-code { margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.05rem; font-weight: 700; letter-spacing: .08em; color: var(--navy); }
 .cp-pass-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 8px; font-size: .88rem; font-weight: 600; color: var(--muted); }
 
+/* ---- Released against medical advice ------------------------------------------------------------- */
+.cp-badge-ama { color: #7a1f1f; background: #ffe2a8; box-shadow: 0 0 0 2px rgba(229, 72, 77, .55); }
+.cp-ama {
+    margin-top: 14px;
+    padding: 18px;
+    text-align: center;
+    background: #fff7e0;
+    border: 2px solid #e5484d;
+    border-radius: 22px;
+    box-shadow: 0 10px 28px rgba(229, 72, 77, .14);
+    animation: pop .35s var(--ease) both;
+}
+.cp-ama-title { font-size: 1.2rem; font-weight: 800; line-height: 1.25; color: #7a1f1f; }
+.cp-ama-text { margin: 8px 0 0; font-size: .92rem; color: #5a4a2a; }
+.cp-ama-meta { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: .85rem; font-weight: 600; color: #6b4a0b; }
+
 /* ---- Footer -------------------------------------------------------------------------------------- */
 .cp-foot { margin-top: 16px; font-size: .8rem; color: var(--muted); text-align: center; }
 .cp-live { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--green); animation: blink 1.4s ease-in-out infinite; }

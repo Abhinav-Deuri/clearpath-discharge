@@ -364,3 +364,12 @@ Decisions: the banner uses a computed HTML field instead of `many2many_tags` (th
 - **Visibility by role** (`groups` on buttons, fields, tags, filters, menus; Administrators always included): Pharmacist -> Pharmacy only; Billing Officer -> Billing and supply logs; Hospital Admin / Insurance -> Insurance only; Doctor and Coordinator -> all three (read side: they fix the plan and release); Nurse -> none. Alerts, the pop-up and the form's top strip are filtered by the same rule on the server (`_can_see_dept`).
 - Extra: **Pharmacy / Billing / Insurance Queue** menus (role-only) open the same kanban pre-filtered to the cards waiting for that department.
 - Note: one department's approval changes its tags and removes the card from that department's queue; the card changes column only when all three have approved (the 3-way gate).
+
+---
+# Phase 15 - Discharge Against Medical Advice (AMA) override
+
+A patient who insists on leaving can be released even though the Coordinator Gate is locked or checks are incomplete.
+- `clearpath.discharge`: `is_ama_discharge`, `ama_reason`, `ama_signed_by`, `ama_timestamp`; `action_open_ama_wizard` (Doctor / Coordinator / Insurance Officer / Administrator only, enforced on the server); `action_reset_demo` clears the four fields.
+- `clearpath.ama.wizard` (`wizard/ama_discharge_wizard.py`): reason, signer (pre-filled with the patient's own name, not a fixed demo name), mandatory liability tick. Confirming sets `state = 'released'`, unlocks the gate, stamps `released_on` and the releasing user, and posts a red chatter note. It does not bump the revision, does not erase open flags, and sends no patient SMS (the normal release text says "cleared to go home").
+- Form: **Patient AMA Choice** button beside the gate pill, **RELEASED: PATIENT CHOICE (AMA)** badge, **AMA Override** ribbon (replaces the green Released ribbon), waiver card. Kanban: amber AMA tag and card border.
+- Tracker: amber **Released Against Medical Advice (Patient Choice)** card instead of the exit pass; shows who signed and when, never the stated reason. The tracker CSS/JS links now carry `?v=15` because Odoo caches static files for a week.

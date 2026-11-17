@@ -249,6 +249,14 @@ class ClearpathDischarge(models.Model):
     coordinator_id = fields.Many2one('res.users', readonly=True, copy=False)
     released_on = fields.Datetime(readonly=True, copy=False)
 
+    # --- Phase 15: discharge Against Medical Advice (patient's choice; bypasses the release gate)
+    is_ama_discharge = fields.Boolean(
+        string="Discharged Against Medical Advice (AMA)", default=False, copy=False, tracking=True)
+    ama_reason = fields.Text(string="Patient Stated Reason / Legal Waiver Note", readonly=True, copy=False)
+    ama_signed_by = fields.Char(
+        string="Waiver Acknowledged By (Patient/Representative)", readonly=True, copy=False)
+    ama_timestamp = fields.Datetime(string="AMA Override Timestamp", readonly=True, copy=False)
+
     # --- Phase 5: multimodal inputs + TPA insurance
     voice_note_audio = fields.Binary(string="Doctor Voice Note (.mp3/.wav)", attachment=True, copy=False)
     voice_note_filename = fields.Char(string="Audio Filename", copy=False)
@@ -404,7 +412,7 @@ class ClearpathDischarge(models.Model):
             items.append(('danger', ('warning', 'cp-pulse'), "Pharmacy safety conflict",
                           "%s Open the Pharmacy button for details. Change the medication to create a "
                           "new revision, then re-run checks." % (self.pharmacy_summary or "")))
-        if see['billing'] and self.billing_status == 'flagged':
+        if see['billing'] and self.billing_status == 'flagged' and self.unbilled_item_count:
             items.append(('warning', ('error', 'cp-shake'), "Surgical billing discrepancy",
                           "%s Open the Billing button, correct the billed quantities, then sign off."
                           % (self.billing_summary or "")))
@@ -425,7 +433,7 @@ class ClearpathDischarge(models.Model):
 
     @api.depends_context('uid')
     @api.depends('state', 'pharmacy_status', 'billing_status', 'insurance_status',
-                 'coordinator_gate_locked', 'token_savings_summary')
+                 'coordinator_gate_locked', 'token_savings_summary', 'supply_line_ids.discrepancy_qty')
     def _compute_alert_count(self):
         for rec in self:
             rec.alert_count = len(rec._alert_items())
@@ -445,7 +453,8 @@ class ClearpathDischarge(models.Model):
                     a.allergen for a in rec.patient_id.allergy_ids if a.criticality == 'high'][:1]
                 kind = 'pharmacy'
                 title = "%s Allergy Conflict" % (", ".join(hit) if hit else "Drug")
-            elif rec.billing_status == 'flagged' and rec._can_see_dept('billing'):
+            elif (rec.billing_status == 'flagged' and rec._can_see_dept('billing')
+                  and any(s.discrepancy_qty > 0 for s in rec.supply_line_ids)):
                 n = len(rec.supply_line_ids.filtered(lambda s: s.discrepancy_qty > 0))
                 kind, title = 'billing', "%d unbilled surgical item%s" % (n, '' if n == 1 else 's')
             elif rec.insurance_status == 'flagged' and rec._can_see_dept('insurance'):
@@ -718,6 +727,7 @@ class ClearpathDischarge(models.Model):
             'nurse_checklist_image': False,
             'patient_payment_status': 'unpaid', 'patient_paid_on': False, 'copay_sms_sent': False,
             'last_sms_status': False,
+            'is_ama_discharge': False, 'ama_reason': False, 'ama_signed_by': False, 'ama_timestamp': False,
         })
         self.message_post(body="Demo reset to a clean Rev 1 draft.")
         return self._soft_reload()
@@ -1007,6 +1017,20 @@ class ClearpathDischarge(models.Model):
     def action_open_insurance_wizard(self):
         return self._open_wizard('clearpath_discharge.insurance_approval_wizard_action')
 
+    # ------------------------------------ Phase 15: Discharge Against Medical Advice (AMA)
+    def _require_ama_rights(self):
+        """Only the doctor, the coordinator or the hospital admin may release a patient against advice."""
+        self._require_any_group(
+            [GROUP_DOCTOR, GROUP_COORDINATOR, GROUP_ADMIN], "a Doctor, Discharge Coordinator or Hospital Admin")
+
+    def action_open_ama_wizard(self):
+        """Legal confirmation pop-up for a patient who insists on leaving against advice."""
+        self.ensure_one()
+        self._require_ama_rights()
+        if self.state == 'released':
+            raise UserError("This discharge packet is already released.")
+        return self._open_wizard('clearpath_discharge.ama_wizard_action', size='medium')
+
     # ------------------------------------------------ Phase 7: final invoice (Odoo Invoicing)
     def action_generate_invoice(self):
         """Turn the reconciled supply log into a DRAFT customer invoice for the patient's Contact."""
@@ -1173,7 +1197,13 @@ class ClearpathDischarge(models.Model):
 
         paid = self.patient_payment_status == 'paid'
         ready = self._copay_ready()
-        if paid and self.state == 'released':
+        ama = bool(self.is_ama_discharge and self.state == 'released')
+        if ama:  # the patient chose to leave: no exit pass, no "cleared" wording
+            copay_mode = 'ama'
+            last = step("\U0001F4B3", "Co-Pay & Exit Pass", 'attention', "Released at your own request")
+            last['tag'] = "AMA"
+            steps.append(last)
+        elif paid and self.state == 'released':
             copay_mode = 'pass'
             steps.append(step("\U0001F4B3", "Co-Pay & Exit Pass", 'done', "Paid. Your exit pass is ready"))
         elif paid and ready:
@@ -1190,7 +1220,9 @@ class ClearpathDischarge(models.Model):
 
         states = [s['state'] for s in steps]
         done_count = states.count('done')
-        if copay_mode == 'pass':
+        if copay_mode == 'ama':
+            badge = ('ama', "Left against medical advice")
+        elif copay_mode == 'pass':
             badge = ('done', "Cleared to go home")
         elif copay_mode == 'pay':
             badge = ('pay', "Payment needed")
@@ -1214,13 +1246,17 @@ class ClearpathDischarge(models.Model):
             'badge_kind': badge[0],
             'badge_text': badge[1],
             'copay_mode': copay_mode,
+            # only the signer's name and the time: the stated reason can be clinical, so it is never shown here
+            'ama_signed_by': (self.ama_signed_by or '') if ama else '',
+            'ama_on': self.ama_timestamp.strftime('%d %b %Y, %H:%M UTC') if ama and self.ama_timestamp else '',
             'copay_amount': "%.2f" % self.copay_amount,
             'pass_code': pass_code,
             'qr_url': '/report/barcode/?' + urlencode(
                 {'barcode_type': 'QR', 'value': pass_code, 'width': 168, 'height': 168}),
             # changes whenever anything visible changes: the page swaps its content only then
             'sig': hashlib.sha256(repr(
-                (states, copay_mode, self.revision_id, badge, "%.2f" % self.copay_amount)).encode()
+                (states, copay_mode, self.revision_id, badge, "%.2f" % self.copay_amount,
+                 self.ama_signed_by if ama else '')).encode()
             ).hexdigest()[:16],
             'notice': '',
         }

@@ -9,7 +9,8 @@
                 <meta name="robots" content="noindex, nofollow"/>
                 <meta name="theme-color" content="#0b2a6f"/>
                 <title>Your discharge progress | ClearPath Hospital</title>
-                <link rel="stylesheet" href="/clearpath_discharge/static/src/tracker/tracker.css"/>
+                <!-- ?v= busts the one-week static cache on phones: bump it whenever tracker.css/js change -->
+                <link rel="stylesheet" href="/clearpath_discharge/static/src/tracker/tracker.css?v=15"/>
             </head>
             <body>
                 <main class="cp-phone">
@@ -83,6 +84,19 @@
                             <p class="cp-card-text">Your exit pass appears here as soon as the ward coordinator releases you.</p>
                         </section>
 
+                        <!-- Released against medical advice: no exit pass, no "cleared" wording -->
+                        <section t-if="copay_mode == 'ama'" class="cp-ama">
+                            <div class="cp-ama-title">Released Against Medical Advice (Patient Choice)</div>
+                            <p class="cp-ama-text">
+                                You chose to leave against your care team's advice and a liability waiver was signed.
+                                If you feel unwell, return to the hospital or call emergency services.
+                            </p>
+                            <div class="cp-ama-meta">
+                                <span t-if="ama_signed_by">Waiver signed by <b><t t-out="ama_signed_by"/></b></span>
+                                <span t-if="ama_on"><t t-out="ama_on"/></span>
+                            </div>
+                        </section>
+
                         <!-- Digital exit pass -->
                         <section t-if="copay_mode == 'pass'" class="cp-pass">
                             <div class="cp-pass-top">
@@ -107,7 +121,7 @@
                         </footer>
                     </div>
                 </main>
-                <script src="/clearpath_discharge/static/src/tracker/tracker.js"/>
+                <script src="/clearpath_discharge/static/src/tracker/tracker.js?v=15"/>
             </body>
         </html>
     </template>

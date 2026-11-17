@@ -716,6 +716,7 @@
 
         &.o_cp_kcard_flagged { border-left-color: #e5484d; }
         &.o_cp_kcard_done { border-left-color: #1f9d55; }
+        &.o_cp_kcard_ama { border-left-color: #e0a100; }
     }
 
     .o_cp_kmain { min-width: 0; }
@@ -749,6 +750,7 @@
     .o_cp_ktag_ready { color: #8a5a00; background: #fdf3dc; }
     .o_cp_ktag_approved { color: #0c5a2e; background: #e6f6ec; }
     .o_cp_ktag_stale { color: #5b6477; background: #eef1f6; }
+    .o_cp_ktag_ama { color: #7a1f1f; background: #ffe2a8; border: 1px solid #e5484d; }
 
     .o_cp_kactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; &:empty { display: none; } }
     .o_cp_kactions .btn .oi { font-size: 16px; vertical-align: -3px; }

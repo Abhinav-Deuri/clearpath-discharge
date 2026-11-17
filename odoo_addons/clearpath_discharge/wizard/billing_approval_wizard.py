@@ -40,6 +40,11 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
     total_used = fields.Integer(compute='_compute_totals')
     total_billed = fields.Integer(compute='_compute_totals')
     total_unbilled = fields.Integer(compute='_compute_totals')
+    # What the header badge shows: green ("All billed") as soon as the Billed column matches what was used.
+    view_state = fields.Selection(
+        [('approved', "Approved"), ('stale', "Stale"), ('reconciled', "All billed"),
+         ('flagged', "Unbilled items"), ('pending', "Pending")],
+        compute='_compute_view_state')
 
     # ------------------------------------------------------------ line seeding
     @api.model
@@ -73,6 +78,16 @@ class ClearpathBillingApprovalWizard(models.TransientModel):
             wiz.total_used = sum(wiz.line_ids.mapped('surgical_qty_used'))
             wiz.total_billed = sum(wiz.line_ids.mapped('billed_qty'))
             wiz.total_unbilled = sum(wiz.line_ids.mapped('discrepancy_qty'))
+
+    @api.depends('status', 'total_unbilled')
+    def _compute_view_state(self):
+        for wiz in self:
+            if wiz.status in ('approved', 'stale'):
+                wiz.view_state = wiz.status
+            elif wiz.total_unbilled == 0:
+                wiz.view_state = 'reconciled'
+            else:
+                wiz.view_state = 'flagged' if wiz.status == 'flagged' else 'pending'
 
     @api.depends('discharge_id.state', 'discharge_id.billing_status',
                  'line_ids.surgical_qty_used', 'line_ids.billed_qty')

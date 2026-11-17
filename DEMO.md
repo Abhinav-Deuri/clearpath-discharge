@@ -73,3 +73,12 @@ opens on this machine, so use the machine's LAN address or a tunnel URL for a re
 2. On PT-402 the banner shows the **Past history** pills (Type 2 Diabetes, Open Cholecystectomy). Click **Generate AI Draft**: the summary lists both histories and the plan tells the patient to monitor blood glucose closely.
 3. As Administrator every card shows its flags and the **Review Meds / Review Billing / Review Claim** buttons. Click one: the approval pop-up opens straight from the card.
 4. Log in as a user with only the Pharmacist group: only Pharmacy tags, the Pharmacy button, the **Pharmacy Queue** menu and the Review Meds button are visible. Billing and Insurance are hidden everywhere (form, alerts, kanban).
+
+## Phase 15: Discharge Against Medical Advice (AMA)
+
+1. Lock PT-402 so the Coordinator Gate is **Locked** and the three flags are open.
+2. In the top banner, next to the gate pill, click **Patient AMA Choice** (Doctor, Coordinator, Insurance Officer and Administrator see it; Nurse, Pharmacist and Billing do not).
+3. The pop-up warns that the doctor advises against discharge. The patient's name is pre-filled as the signer; tick the liability box and click **Confirm AMA Discharge (Patient Choice)**. Without the tick the server refuses.
+4. The record moves to **Released** with the amber **AMA Override** ribbon, the **RELEASED: PATIENT CHOICE (AMA)** badge, an **AMA Legal Waiver Signed** card, and a red AMA note in the chatter. The open flags are not erased.
+5. The live tracker shows **Released Against Medical Advice (Patient Choice)** instead of the green exit pass. The stated reason is never shown on the patient page. No "you are cleared" SMS is sent.
+6. **Reset Demo** clears the AMA fields.
